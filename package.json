@@ -1,0 +1,38 @@
+{
+  "name": "portfolio-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Azure Functions API for Personal Portfolio Management",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "storage:start": "azurite --silent --location .azurite",
+    "storage:start:docker": "docker compose up -d azurite",
+    "storage:stop:docker": "docker compose down",
+    "start": "func start",
+    "prestart": "npm run build",
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@azure/cosmos": "^4.2.0",
+    "@azure/functions": "^4.6.0",
+    "@azure/identity": "^4.8.0",
+    "@azure/keyvault-secrets": "^4.9.0",
+    "@azure/storage-queue": "^12.25.0",
+    "@portfolio/contracts": "file:../portfolio-contracts",
+    "@portfolio/tax-engine": "file:../portfolio-tax-engine"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "azure-functions-core-tools": "^4.0.6280",
+    "azurite": "^3.35.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

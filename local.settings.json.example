@@ -1,0 +1,20 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "COSMOS_ENDPOINT": "https://localhost:8081",
+    "COSMOS_KEY": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+    "COSMOS_DATABASE": "portfolio",
+    "KEY_VAULT_NAME": "",
+    "SIMPLEFIN_ACCESS_URL": "",
+    "SNAPTRADE_CLIENT_ID": "",
+    "SNAPTRADE_CONSUMER_KEY": "",
+    "SNAPTRADE_WEBHOOK_SECRET": "",
+    "PORTFOLIO_QUEUE_NAME": "portfolio-sync",
+    "DEFAULT_HOUSEHOLD_ID": "local-household"
+  },
+  "Host": {
+    "CORS": "*"
+  }
+}

@@ -1,0 +1,829 @@
+import type { OpenAPIV3 } from "./types.js";
+
+const filingStatusEnum = [
+  "single",
+  "married_filing_jointly",
+  "married_filing_separately",
+  "head_of_household",
+  "qualifying_surviving_spouse",
+] as const;
+
+const personaEnum = [
+  "w2_employee",
+  "low_income",
+  "business_owner",
+  "family_with_kids",
+] as const;
+
+const transactionCategoryEnum = [
+  "income",
+  "transfer",
+  "housing",
+  "utilities",
+  "food",
+  "transport",
+  "healthcare",
+  "insurance",
+  "entertainment",
+  "shopping",
+  "education",
+  "taxes",
+  "fees",
+  "investment",
+  "other",
+  "uncategorized",
+] as const;
+
+const accountSourceEnum = ["simplefin", "snaptrade", "manual"] as const;
+
+export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
+  const spec: OpenAPIV3.Document = {
+    openapi: "3.0.3",
+    info: {
+      title: "Portfolio API",
+      version: "0.1.0",
+      description:
+        "Personal portfolio management API (Azure Functions). MVP auth uses the `x-household-id` header; defaults to `local-household` when omitted.\n\n**Disclaimer:** Tax endpoints return educational estimates only — not tax, legal, or investment advice.",
+      contact: { name: "Portfolio" },
+    },
+    servers: [{ url: serverUrl, description: "Current host" }],
+    tags: [
+      { name: "System", description: "Health and documentation" },
+      { name: "Household", description: "Household profile and settings" },
+      { name: "Accounts", description: "Linked financial accounts" },
+      { name: "Transactions", description: "Cash transactions and categorization" },
+      { name: "Investments", description: "Holdings and net worth" },
+      { name: "Tax", description: "Federal tax estimates and strategies" },
+      { name: "Integrations", description: "SimpleFIN and SnapTrade" },
+      { name: "Batch", description: "Heavy jobs (Phase 2+)" },
+    ],
+    paths: {
+      "/api/health": {
+        get: {
+          tags: ["System"],
+          summary: "Health check",
+          operationId: "getHealth",
+          security: [],
+          responses: {
+            "200": {
+              description: "Service is up",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/HealthResponse" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/api/household": {
+        get: {
+          tags: ["Household"],
+          summary: "Get household",
+          operationId: "getHousehold",
+          responses: {
+            "200": {
+              description: "Household record",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/Household" },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+        post: {
+          tags: ["Household"],
+          summary: "Create household",
+          operationId: "createHousehold",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CreateHouseholdRequest" },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Created",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/Household" },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/BadRequest" },
+          },
+        },
+        put: {
+          tags: ["Household"],
+          summary: "Update household (upsert if missing)",
+          operationId: "updateHousehold",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/UpdateHouseholdRequest" },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Updated household",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/Household" },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/BadRequest" },
+          },
+        },
+      },
+      "/api/accounts": {
+        get: {
+          tags: ["Accounts"],
+          summary: "List accounts",
+          operationId: "listAccounts",
+          responses: {
+            "200": {
+              description: "Accounts for household",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      accounts: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/Account" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/api/transactions": {
+        get: {
+          tags: ["Transactions"],
+          summary: "List transactions",
+          operationId: "listTransactions",
+          parameters: [
+            {
+              name: "accountId",
+              in: "query",
+              schema: { type: "string" },
+            },
+            {
+              name: "category",
+              in: "query",
+              schema: {
+                type: "string",
+                enum: [...transactionCategoryEnum],
+              },
+            },
+            { name: "startDate", in: "query", schema: { type: "string" } },
+            { name: "endDate", in: "query", schema: { type: "string" } },
+            {
+              name: "limit",
+              in: "query",
+              schema: { type: "integer", default: 100, maximum: 500 },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Filtered transactions",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      transactions: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/Transaction" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/api/transactions/categorize": {
+        post: {
+          tags: ["Transactions"],
+          summary: "Categorize a transaction",
+          operationId: "categorizeTransaction",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CategorizeTransactionRequest",
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Updated transaction",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/Transaction" },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/BadRequest" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
+      "/api/holdings": {
+        get: {
+          tags: ["Investments"],
+          summary: "List holdings",
+          operationId: "listHoldings",
+          responses: {
+            "200": {
+              description: "Investment holdings",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      holdings: {
+                        type: "array",
+                        items: { $ref: "#/components/schemas/Holding" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/api/networth": {
+        get: {
+          tags: ["Investments"],
+          summary: "Net worth snapshot",
+          operationId: "getNetworth",
+          responses: {
+            "200": {
+              description: "Summary, accounts, and holdings",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/NetworthResponse" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/api/tax/estimate": {
+        post: {
+          tags: ["Tax"],
+          summary: "Estimate federal tax",
+          operationId: "estimateTax",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/TaxYearInput" },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Estimate with disclaimer",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/TaxEstimateResponse" },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/BadRequest" },
+          },
+        },
+      },
+      "/api/tax/strategies": {
+        get: {
+          tags: ["Tax"],
+          summary: "Suggest tax strategies",
+          operationId: "getTaxStrategies",
+          parameters: [
+            {
+              name: "wages",
+              in: "query",
+              description: "Annual wages for strategy context",
+              schema: { type: "number", default: 0 },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Strategies with disclaimer",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/TaxStrategiesResponse" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/api/integrations/simplefin/connect": {
+        post: {
+          tags: ["Integrations"],
+          summary: "Connect SimpleFIN (claim setup token)",
+          operationId: "connectSimplefin",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ConnectSimplefinRequest" },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Connected; sync may be queued",
+              content: {
+                "application/json": {
+                  schema: {
+                    $ref: "#/components/schemas/SimplefinConnectResponse",
+                  },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/BadRequest" },
+          },
+        },
+      },
+      "/api/integrations/simplefin/sync": {
+        post: {
+          tags: ["Integrations"],
+          summary: "Trigger SimpleFIN sync",
+          operationId: "syncSimplefin",
+          parameters: [
+            {
+              name: "now",
+              in: "query",
+              description: "If true, sync immediately instead of queueing",
+              schema: { type: "boolean", default: false },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Queued or completed sync",
+              content: {
+                "application/json": {
+                  schema: {
+                    oneOf: [
+                      { $ref: "#/components/schemas/SimplefinQueuedResponse" },
+                      { $ref: "#/components/schemas/SimplefinSyncResult" },
+                    ],
+                  },
+                },
+              },
+            },
+            "429": {
+              description: "Daily SimpleFIN request limit (24) reached",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/ErrorResponse" },
+                },
+              },
+            },
+            "500": { $ref: "#/components/responses/ServerError" },
+          },
+        },
+      },
+      "/api/integrations/snaptrade/connect": {
+        post: {
+          tags: ["Integrations"],
+          summary: "Start SnapTrade OAuth",
+          operationId: "connectSnaptrade",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ConnectSnaptradeRequest" },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "OAuth redirect URI",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/SnaptradeConnectResponse" },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/BadRequest" },
+          },
+        },
+      },
+      "/api/integrations/snaptrade/callback": {
+        get: {
+          tags: ["Integrations"],
+          summary: "SnapTrade OAuth callback",
+          operationId: "snaptradeCallback",
+          parameters: [
+            {
+              name: "snaptrade",
+              in: "query",
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Callback acknowledged; sync queued",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/SnaptradeCallbackResponse" },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/api/integrations/snaptrade/webhook": {
+        post: {
+          tags: ["Integrations"],
+          summary: "SnapTrade webhook receiver",
+          operationId: "snaptradeWebhook",
+          security: [{ SnaptradeSignature: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: true,
+                  description: "SnapTrade webhook payload",
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Webhook accepted",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      received: { type: "boolean" },
+                      duplicate: { type: "boolean" },
+                    },
+                  },
+                },
+              },
+            },
+            "401": { $ref: "#/components/responses/Unauthorized" },
+          },
+        },
+      },
+      "/api/batch/submit": {
+        post: {
+          tags: ["Batch"],
+          summary: "Submit batch job (Phase 2+ stub)",
+          operationId: "submitBatch",
+          responses: {
+            "200": {
+              description: "Deferred — use queue workers in MVP",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/BatchSubmitResponse" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    components: {
+      securitySchemes: {
+        HouseholdId: {
+          type: "apiKey",
+          in: "header",
+          name: "x-household-id",
+          description:
+            "Household scope for all data. Defaults to `local-household` when omitted (see DEFAULT_HOUSEHOLD_ID).",
+        },
+        SnaptradeSignature: {
+          type: "apiKey",
+          in: "header",
+          name: "x-snaptrade-signature",
+          description: "HMAC signature from SnapTrade (required in production).",
+        },
+      },
+      responses: {
+        BadRequest: {
+          description: "Validation or client error",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ErrorResponse" },
+            },
+          },
+        },
+        NotFound: {
+          description: "Resource not found",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ErrorResponse" },
+            },
+          },
+        },
+        Unauthorized: {
+          description: "Invalid credentials or signature",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ErrorResponse" },
+            },
+          },
+        },
+        ServerError: {
+          description: "Server error",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ErrorResponse" },
+            },
+          },
+        },
+      },
+      schemas: {
+        ErrorResponse: {
+          type: "object",
+          properties: { error: { type: "string" } },
+          required: ["error"],
+        },
+        HealthResponse: {
+          type: "object",
+          properties: {
+            status: { type: "string", example: "ok" },
+            service: { type: "string", example: "portfolio-api" },
+            timestamp: { type: "string", format: "date-time" },
+          },
+        },
+        Household: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            householdId: { type: "string" },
+            displayName: { type: "string" },
+            state: { type: "string", minLength: 2, maxLength: 2, example: "CA" },
+            filingStatus: { type: "string", enum: [...filingStatusEnum] },
+            dependents: { type: "integer", minimum: 0 },
+            persona: { type: "string", enum: [...personaEnum] },
+            netWorthSummary: { $ref: "#/components/schemas/NetWorthSummary" },
+            settings: {
+              type: "object",
+              properties: {
+                currency: { type: "string" },
+                timezone: { type: "string" },
+              },
+            },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        CreateHouseholdRequest: {
+          type: "object",
+          required: ["displayName", "state", "filingStatus", "persona"],
+          properties: {
+            displayName: { type: "string", minLength: 1 },
+            state: { type: "string", minLength: 2, maxLength: 2 },
+            filingStatus: { type: "string", enum: [...filingStatusEnum] },
+            dependents: { type: "integer", minimum: 0, default: 0 },
+            persona: { type: "string", enum: [...personaEnum] },
+          },
+        },
+        UpdateHouseholdRequest: {
+          type: "object",
+          properties: {
+            displayName: { type: "string" },
+            state: { type: "string", minLength: 2, maxLength: 2 },
+            filingStatus: { type: "string", enum: [...filingStatusEnum] },
+            dependents: { type: "integer", minimum: 0 },
+            persona: { type: "string", enum: [...personaEnum] },
+          },
+        },
+        Account: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            householdId: { type: "string" },
+            accountId: { type: "string" },
+            source: { type: "string", enum: [...accountSourceEnum] },
+            displayName: { type: "string" },
+            institutionName: { type: "string" },
+            accountType: { type: "string" },
+            currency: { type: "string" },
+            balance: { type: "number" },
+            isActive: { type: "boolean" },
+            lastSyncedAt: { type: "string", format: "date-time" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        Transaction: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            householdId: { type: "string" },
+            txnId: { type: "string" },
+            accountId: { type: "string" },
+            amount: { type: "number" },
+            date: { type: "string" },
+            description: { type: "string" },
+            merchant: { type: "string" },
+            category: { type: "string", enum: [...transactionCategoryEnum] },
+            pending: { type: "boolean" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        CategorizeTransactionRequest: {
+          type: "object",
+          required: ["txnId", "category"],
+          properties: {
+            txnId: { type: "string" },
+            category: { type: "string", enum: [...transactionCategoryEnum] },
+          },
+        },
+        Holding: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            householdId: { type: "string" },
+            holdingId: { type: "string" },
+            accountId: { type: "string" },
+            symbol: { type: "string" },
+            description: { type: "string" },
+            quantity: { type: "number" },
+            price: { type: "number" },
+            marketValue: { type: "number" },
+            currency: { type: "string" },
+            assetClass: { type: "string" },
+            lastSyncedAt: { type: "string", format: "date-time" },
+          },
+        },
+        NetWorthSummary: {
+          type: "object",
+          properties: {
+            totalAssets: { type: "number" },
+            totalLiabilities: { type: "number" },
+            netWorth: { type: "number" },
+            cashBalance: { type: "number" },
+            investmentValue: { type: "number" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        NetworthResponse: {
+          type: "object",
+          properties: {
+            summary: {
+              oneOf: [
+                { $ref: "#/components/schemas/NetWorthSummary" },
+                { type: "null" },
+              ],
+            },
+            accounts: {
+              type: "array",
+              items: { $ref: "#/components/schemas/Account" },
+            },
+            holdings: {
+              type: "array",
+              items: { $ref: "#/components/schemas/Holding" },
+            },
+          },
+        },
+        TaxYearInput: {
+          type: "object",
+          required: ["taxYear", "filingStatus"],
+          properties: {
+            taxYear: { type: "integer", example: 2025 },
+            filingStatus: { type: "string", enum: [...filingStatusEnum] },
+            wages: { type: "number", default: 0 },
+            selfEmploymentIncome: { type: "number", default: 0 },
+            interestIncome: { type: "number", default: 0 },
+            dividendIncome: { type: "number", default: 0 },
+            capitalGainsShort: { type: "number", default: 0 },
+            capitalGainsLong: { type: "number", default: 0 },
+            otherIncome: { type: "number", default: 0 },
+            adjustments: { type: "number", default: 0 },
+            itemizedDeductions: { type: "number" },
+            standardDeductionOverride: { type: "number" },
+            dependents: { type: "integer", minimum: 0, default: 0 },
+            retirementContributions: { type: "number", default: 0 },
+            hsaContributions: { type: "number", default: 0 },
+          },
+        },
+        TaxEstimate: {
+          type: "object",
+          properties: {
+            taxYear: { type: "integer" },
+            adjustedGrossIncome: { type: "number" },
+            taxableIncome: { type: "number" },
+            standardDeduction: { type: "number" },
+            federalTax: { type: "number" },
+            effectiveRate: { type: "number" },
+            marginalRate: { type: "number" },
+            breakdown: { type: "object", additionalProperties: { type: "number" } },
+          },
+        },
+        TaxEstimateResponse: {
+          type: "object",
+          properties: {
+            estimate: { $ref: "#/components/schemas/TaxEstimate" },
+            disclaimer: { type: "string" },
+          },
+        },
+        Strategy: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            description: { type: "string" },
+            estimatedSavings: { type: "number" },
+            eligibility: { type: "string" },
+            risks: { type: "string" },
+            missingData: { type: "array", items: { type: "string" } },
+            priority: { type: "integer" },
+          },
+        },
+        TaxStrategiesResponse: {
+          type: "object",
+          properties: {
+            strategies: {
+              type: "array",
+              items: { $ref: "#/components/schemas/Strategy" },
+            },
+            disclaimer: { type: "string" },
+          },
+        },
+        ConnectSimplefinRequest: {
+          type: "object",
+          required: ["setupToken"],
+          properties: { setupToken: { type: "string" } },
+        },
+        SimplefinConnectResponse: {
+          type: "object",
+          properties: {
+            connected: { type: "boolean" },
+            secretStored: { type: "boolean" },
+            message: { type: "string" },
+          },
+        },
+        SimplefinQueuedResponse: {
+          type: "object",
+          properties: { queued: { type: "boolean", example: true } },
+        },
+        SimplefinSyncResult: {
+          type: "object",
+          properties: {
+            accountsSynced: { type: "integer" },
+            transactionsSynced: { type: "integer" },
+            syncedAt: { type: "string", format: "date-time" },
+          },
+          additionalProperties: true,
+        },
+        ConnectSnaptradeRequest: {
+          type: "object",
+          properties: { redirectUrl: { type: "string", format: "uri" } },
+        },
+        SnaptradeConnectResponse: {
+          type: "object",
+          properties: {
+            redirectUri: { type: "string", format: "uri" },
+            userId: { type: "string" },
+          },
+        },
+        SnaptradeCallbackResponse: {
+          type: "object",
+          properties: {
+            status: { type: "string" },
+            message: { type: "string" },
+          },
+        },
+        BatchSubmitResponse: {
+          type: "object",
+          properties: {
+            deferred: { type: "boolean" },
+            message: { type: "string" },
+            householdId: { type: "string" },
+          },
+        },
+      },
+    },
+    security: [{ HouseholdId: [] }],
+  };
+
+  return spec;
+}
