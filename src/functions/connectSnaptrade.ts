@@ -53,19 +53,13 @@ async function snaptradeCallbackHandler(
   request: HttpRequest,
   _context: InvocationContext
 ): Promise<HttpResponseInit> {
-  const auth = getAuthContext(request);
   const url = new URL(request.url);
   const status = url.searchParams.get("snaptrade") ?? "connected";
 
-  const { enqueueMessage } = await import("../lib/queue.js");
-  await enqueueMessage({
-    type: "sync.snaptrade",
-    householdId: auth.householdId,
-  });
-
   return jsonResponse({
     status,
-    message: "SnapTrade connection received. Sync queued.",
+    message:
+      "SnapTrade connection received. Click Sync now to fetch holdings.",
   });
 }
 

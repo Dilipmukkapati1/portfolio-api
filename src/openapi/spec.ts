@@ -34,6 +34,15 @@ const transactionCategoryEnum = [
   "uncategorized",
 ] as const;
 
+const investmentCategoryEnum = [
+  "cash",
+  "stock",
+  "etf",
+  "mutual_fund",
+  "bond",
+  "other",
+] as const;
+
 const accountSourceEnum = ["simplefin", "snaptrade", "manual"] as const;
 
 export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
@@ -367,27 +376,14 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
       "/api/integrations/simplefin/sync": {
         post: {
           tags: ["Integrations"],
-          summary: "Trigger SimpleFIN sync",
+          summary: "Sync SimpleFIN data into the local database",
           operationId: "syncSimplefin",
-          parameters: [
-            {
-              name: "now",
-              in: "query",
-              description: "If true, sync immediately instead of queueing",
-              schema: { type: "boolean", default: false },
-            },
-          ],
           responses: {
             "200": {
-              description: "Queued or completed sync",
+              description: "Completed sync",
               content: {
                 "application/json": {
-                  schema: {
-                    oneOf: [
-                      { $ref: "#/components/schemas/SimplefinQueuedResponse" },
-                      { $ref: "#/components/schemas/SimplefinSyncResult" },
-                    ],
-                  },
+                  schema: { $ref: "#/components/schemas/SimplefinSyncResult" },
                 },
               },
             },
@@ -428,6 +424,24 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
           },
         },
       },
+      "/api/integrations/snaptrade/sync": {
+        post: {
+          tags: ["Integrations"],
+          summary: "Sync SnapTrade data into the local database",
+          operationId: "syncSnaptrade",
+          responses: {
+            "200": {
+              description: "Completed sync",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/SnaptradeSyncResult" },
+                },
+              },
+            },
+            "500": { $ref: "#/components/responses/ServerError" },
+          },
+        },
+      },
       "/api/integrations/snaptrade/callback": {
         get: {
           tags: ["Integrations"],
@@ -442,7 +456,7 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
           ],
           responses: {
             "200": {
-              description: "Callback acknowledged; sync queued",
+              description: "Callback acknowledged",
               content: {
                 "application/json": {
                   schema: { $ref: "#/components/schemas/SnaptradeCallbackResponse" },
@@ -670,6 +684,7 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
             price: { type: "number" },
             marketValue: { type: "number" },
             currency: { type: "string" },
+            category: { type: "string", enum: [...investmentCategoryEnum] },
             assetClass: { type: "string" },
             lastSyncedAt: { type: "string", format: "date-time" },
           },
@@ -811,6 +826,15 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
             status: { type: "string" },
             message: { type: "string" },
           },
+        },
+        SnaptradeSyncResult: {
+          type: "object",
+          properties: {
+            holdingsSynced: { type: "integer" },
+            syncedAt: { type: "string", format: "date-time" },
+            message: { type: "string" },
+          },
+          additionalProperties: true,
         },
         BatchSubmitResponse: {
           type: "object",

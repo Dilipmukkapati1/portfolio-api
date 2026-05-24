@@ -27,6 +27,11 @@ async function integrationsStatusHandler(
     "simplefin"
   );
 
+  const snaptradeSync = await integrationRepository.getSyncState(
+    householdId,
+    "snaptrade"
+  );
+
   return jsonResponse({
     simplefin: {
       connected: Boolean(simplefinToken || simplefinSecret),
@@ -35,6 +40,8 @@ async function integrationsStatusHandler(
     },
     snaptrade: {
       connected: Boolean(snaptradeToken),
+      lastSyncedAt: snaptradeSync?.lastSyncedAt,
+      lastError: snaptradeSync?.lastError,
     },
   });
 }

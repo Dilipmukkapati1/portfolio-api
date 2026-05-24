@@ -17,6 +17,7 @@ describe("buildOpenApiSpec", () => {
         "/api/integrations/simplefin/sync",
         "/api/integrations/snaptrade/callback",
         "/api/integrations/snaptrade/connect",
+        "/api/integrations/snaptrade/sync",
         "/api/integrations/snaptrade/webhook",
         "/api/networth",
         "/api/tax/estimate",

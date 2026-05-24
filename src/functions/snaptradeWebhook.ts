@@ -5,7 +5,6 @@ import {
   verifySnaptradeWebhookFromVault,
 } from "../integrations/snaptrade/webhook.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
-import { enqueueMessage } from "../lib/queue.js";
 import { getConfig } from "../lib/config.js";
 
 async function snaptradeWebhookHandler(
@@ -36,18 +35,7 @@ async function snaptradeWebhookHandler(
     return jsonResponse({ duplicate: true });
   }
 
-  if (
-    payload.eventType === "ACCOUNT_HOLDINGS_UPDATED" ||
-    !payload.eventType
-  ) {
-    await enqueueMessage({
-      type: "sync.snaptrade",
-      householdId,
-      accountId: payload.accountId,
-    });
-  }
-
-  context.log("SnapTrade webhook processed", eventId);
+  context.log("SnapTrade webhook recorded", eventId);
   return jsonResponse({ received: true });
 }
 

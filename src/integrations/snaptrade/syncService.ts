@@ -1,4 +1,5 @@
 import type { Account, Holding } from "@portfolio/contracts";
+import { categorizeInvestment } from "@portfolio/contracts";
 import { accountRepository } from "../../cosmos/repositories/accountRepository.js";
 import { holdingRepository } from "../../cosmos/repositories/holdingRepository.js";
 import { integrationRepository } from "../../cosmos/repositories/integrationRepository.js";
@@ -30,6 +31,10 @@ export async function syncSnaptradeForHousehold(
 
   const now = new Date().toISOString();
   let holdingCount = 0;
+  const existingHoldings = await holdingRepository.listByHousehold(householdId);
+  const existingById = new Map(
+    existingHoldings.map((holding) => [holding.holdingId, holding] as const)
+  );
 
   for (const account of snapAccounts.length > 0
     ? snapAccounts
@@ -77,8 +82,12 @@ export async function syncSnaptradeForHousehold(
         price: pos.price,
         marketValue,
         currency: "USD",
+        category: categorizeInvestment({
+          symbol: pos.symbol,
+          description: pos.description,
+        }),
         lastSyncedAt: now,
-        createdAt: now,
+        createdAt: existingById.get(holdingId)?.createdAt ?? now,
         updatedAt: now,
       };
       await holdingRepository.upsert(holding);

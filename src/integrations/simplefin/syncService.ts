@@ -1,4 +1,5 @@
 import type { Account, Holding, Transaction } from "@portfolio/contracts";
+import { categorizeInvestment } from "@portfolio/contracts";
 import { accountRepository } from "../../cosmos/repositories/accountRepository.js";
 import { transactionRepository } from "../../cosmos/repositories/transactionRepository.js";
 import { householdRepository } from "../../cosmos/repositories/householdRepository.js";
@@ -126,12 +127,22 @@ export async function syncSimplefinForHousehold(
 
   await deactivateMissingSimplefinAccounts(householdId, syncedAccountIds, now);
 
+  const previousSyncState = await integrationRepository.getSyncState(
+    householdId,
+    "simplefin"
+  );
+  const today = now.slice(0, 10);
+  const previousDate = previousSyncState?.lastSyncedAt?.slice(0, 10);
+  const dailyRequestCount =
+    previousDate === today ? (previousSyncState?.dailyRequestCount ?? 0) + 1 : 1;
+
   await integrationRepository.upsertSyncState({
     id: "simplefin",
     householdId,
     provider: "simplefin",
     status: "success",
     lastSyncedAt: now,
+    dailyRequestCount,
     updatedAt: now,
     errorCount: 0,
     lastError: fatal.length > 0 ? formatSimpleFinErrors(fatal) : undefined,
@@ -175,6 +186,14 @@ async function syncAccountTransactions(
   sfAccount: SimpleFinAccount,
   now: string
 ): Promise<number> {
+  const existingTxns = await transactionRepository.list(householdId, {
+    accountId,
+    limit: 500,
+  });
+  const existingById = new Map(
+    existingTxns.map((txn) => [txn.txnId, txn] as const)
+  );
+
   let count = 0;
   for (const sfTxn of sfAccount.transactions ?? []) {
     const txnId = `sf-txn-${accountId}-${sfTxn.id}`;
@@ -199,7 +218,7 @@ async function syncAccountTransactions(
       category: categorizeTransaction(description, amount),
       pending: sfTxn.pending ?? false,
       externalId: sfTxn.id,
-      createdAt: now,
+      createdAt: existingById.get(txnId)?.createdAt ?? now,
       updatedAt: now,
     };
     await transactionRepository.upsert(txn);
@@ -236,6 +255,7 @@ function mapSimpleFinHolding(
       ? marketValue / quantity
       : parseFloat(h.purchase_price ?? "0") || undefined;
   const holdingId = `${accountId}-${symbol}`;
+  const category = categorizeInvestment({ symbol, description: h.description });
   return {
     id: holdingId,
     householdId,
@@ -248,6 +268,7 @@ function mapSimpleFinHolding(
     marketValue,
     costBasis: parseFloat(h.cost_basis ?? "") || undefined,
     currency: h.currency?.trim() || sfAccount.currency || "USD",
+    category,
     lastSyncedAt: now,
     createdAt,
     updatedAt: now,
@@ -314,6 +335,7 @@ async function syncAccountHoldings(
       price: 1,
       marketValue: cashAmount,
       currency: sfAccount.currency ?? "USD",
+      category: "cash",
       lastSyncedAt: now,
       createdAt: existingCash?.createdAt ?? now,
       updatedAt: now,

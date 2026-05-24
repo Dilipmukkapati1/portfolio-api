@@ -5,7 +5,6 @@ import { claimSetupToken } from "../integrations/simplefin/client.js";
 import { getAuthContext } from "../lib/auth.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
 import { setSecret, secretNameForSimplefin } from "../lib/keyvault.js";
-import { tryEnqueueMessage } from "../lib/queue.js";
 
 async function connectSimplefinHandler(
   request: HttpRequest,
@@ -44,18 +43,11 @@ async function connectSimplefinHandler(
       console.warn("SimpleFIN integration metadata save failed:", err);
     }
 
-    const syncQueued = await tryEnqueueMessage({
-      type: "sync.simplefin",
-      householdId: auth.householdId,
-    });
-
     return jsonResponse({
       connected: true,
       secretStored: true,
-      syncQueued,
-      message: syncQueued
-        ? "SimpleFIN connected. Initial sync queued."
-        : "SimpleFIN connected. Click Sync now to fetch accounts (queue unavailable).",
+      message:
+        "SimpleFIN connected. Click Sync now to fetch accounts and transactions.",
     });
   } catch (err) {
     return errorResponse(
