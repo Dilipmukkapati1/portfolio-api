@@ -15,7 +15,7 @@ services:
       --location /data
       --skipApiVersionCheck
     volumes:
-      - azurite-data:/data
+      - ./.azurite:/data
 
   cosmos-emulator:
     image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
@@ -24,8 +24,23 @@ services:
       - "1234:1234"
     environment:
       AZURE_COSMOS_EMULATOR_PARTITION_COUNT: 10
-      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "false"
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "true"
     mem_limit: 3g
+    volumes:
+      - ./.cosmos:/data
 
-volumes:
-  azurite-data:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "PortfolioDev1!"
+    volumes:
+      - ./.mssql:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s

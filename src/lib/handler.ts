@@ -44,7 +44,7 @@ export function withStorage(
       const storageMsg = storageErrorMessage(err);
       if (storageMsg) {
         return errorResponse(
-          `Storage unavailable: ${storageMsg}. Start Cosmos emulator or set STORAGE_MODE=memory in local.settings.json.`,
+          `Storage unavailable: ${storageMsg}. Start Cosmos emulator or set STORAGE_MODE=disk or STORAGE_MODE=memory in local.settings.json.`,
           503
         );
       }

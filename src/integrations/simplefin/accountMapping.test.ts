@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildConnectionIndex,
+  hardRefreshStartDate,
+  incrementalStartDate,
   inferAccountType,
+  isInitialSimplefinSync,
   resolveInstitutionName,
+  resolveSimplefinSyncWindow,
   resolveSyncedAccountType,
   simpleFinAccountDocumentId,
   simpleFinExternalId,
@@ -100,5 +104,42 @@ describe("resolveSyncedAccountType", () => {
     expect(resolveSyncedAccountType("Everyday Checking", 2500, [])).toBe(
       "depository"
     );
+  });
+});
+
+describe("resolveSimplefinSyncWindow", () => {
+  it("uses hard refresh for the first sync", () => {
+    expect(
+      resolveSimplefinSyncWindow({
+        hasSimplefinAccounts: false,
+        lastSyncedAt: undefined,
+        accountLastSyncedAt: [],
+      })
+    ).toEqual({
+      mode: "hard",
+      startDate: hardRefreshStartDate(),
+    });
+  });
+
+  it("uses incremental sync from the last sync timestamp", () => {
+    const lastSyncedAt = "2026-05-20T12:00:00.000Z";
+    const window = resolveSimplefinSyncWindow({
+      hasSimplefinAccounts: true,
+      lastSyncedAt,
+      accountLastSyncedAt: [lastSyncedAt],
+    });
+
+    expect(window.mode).toBe("incremental");
+    expect(Number(window.startDate)).toBeLessThanOrEqual(
+      Number(incrementalStartDate(lastSyncedAt))
+    );
+  });
+
+  it("detects initial sync when accounts or sync state are missing", () => {
+    expect(isInitialSimplefinSync(false, undefined)).toBe(true);
+    expect(isInitialSimplefinSync(true, undefined)).toBe(true);
+    expect(
+      isInitialSimplefinSync(true, "2026-05-20T12:00:00.000Z")
+    ).toBe(false);
   });
 });

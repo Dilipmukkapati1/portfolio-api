@@ -7,7 +7,7 @@ Azure Functions v4 (TypeScript) — Cosmos DB, Key Vault, SimpleFIN, SnapTrade.
 - Node 20+
 - [Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local) v4
 - [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) (queues/storage)
-- Cosmos DB Emulator or dev Cosmos account — **optional** if `STORAGE_MODE=memory` (default in `local.settings.json.example`)
+- Cosmos DB Emulator or dev Cosmos account — **optional** if `STORAGE_MODE=disk` (default in `local.settings.json.example`) or `STORAGE_MODE=memory`
 
 ## Local run
 
@@ -30,7 +30,15 @@ npm install && npm run build
 npm start
 ```
 
-By default, local settings use **`STORAGE_MODE=memory`** so Swagger and the web app work without Cosmos. Remove it or set `STORAGE_MODE=cosmos` when using the emulator (`npm run cosmos:start:docker` or the [Cosmos emulator](https://learn.microsoft.com/azure/cosmos-db/local-emulator)).
+By default, local settings use **`STORAGE_MODE=cosmos`** with the Cosmos emulator for households, accounts, holdings, and sync state. **Transactions** are stored in **Azure SQL** when `AZURE_SQL_*` is set (included in `local.settings.json.example`).
+
+```bash
+npm run dev:deps      # Azurite + Cosmos emulator + SQL Server
+npm run db:migrate    # Liquibase schema
+npm start
+```
+
+Use `STORAGE_MODE=disk` only when the Cosmos emulator is unavailable (core data falls back to `.local-data/portfolio-store.json`; transactions still require SQL). Use `STORAGE_MODE=memory` for ephemeral in-process storage in tests.
 
 **SimpleFIN locally:** When `KEY_VAULT_NAME` is empty, claimed Access URLs are saved to `.local-secrets.json` (gitignored) so setup tokens are not wasted on retry. Each setup token from [SimpleFIN Bridge](https://bridge.simplefin.org/simplefin/create) can only be claimed once — generate a new token if connect fails.
 

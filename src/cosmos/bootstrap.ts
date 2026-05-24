@@ -5,7 +5,6 @@ const CONTAINERS = [
   "households",
   "members",
   "accounts",
-  "transactions",
   "holdings",
   "taxProfiles",
   "scenarios",

@@ -124,11 +124,82 @@ export const SIMPLEFIN_DEFAULT_TRANSACTION_DAYS = 44;
 /** Hard cap enforced by SimpleFIN Bridge (chunk for longer backfills). */
 export const SIMPLEFIN_HARD_MAX_TRANSACTION_DAYS = 89;
 
+/** Overlap when diff-syncing so late-posted transactions are not missed. */
+export const SIMPLEFIN_INCREMENTAL_OVERLAP_DAYS = 1;
+
+export function unixStartOfDayUtc(daysAgo: number): string {
+  const start = new Date();
+  start.setUTCDate(start.getUTCDate() - daysAgo);
+  start.setUTCHours(0, 0, 0, 0);
+  return String(Math.floor(start.getTime() / 1000));
+}
+
 export function defaultTransactionStartDate(
   days = SIMPLEFIN_DEFAULT_TRANSACTION_DAYS
 ): string {
-  const start = new Date();
-  start.setUTCDate(start.getUTCDate() - days);
-  start.setUTCHours(0, 0, 0, 0);
-  return String(Math.floor(start.getTime() / 1000));
+  return unixStartOfDayUtc(days);
+}
+
+/** Full backfill window for first sync or newly discovered accounts. */
+export function hardRefreshStartDate(): string {
+  return unixStartOfDayUtc(SIMPLEFIN_HARD_MAX_TRANSACTION_DAYS);
+}
+
+/** Diff sync from the last successful sync with a small overlap. */
+export function incrementalStartDate(lastSyncedAt: string): string {
+  const synced = new Date(lastSyncedAt);
+  synced.setUTCDate(synced.getUTCDate() - SIMPLEFIN_INCREMENTAL_OVERLAP_DAYS);
+  synced.setUTCHours(0, 0, 0, 0);
+  return String(Math.floor(synced.getTime() / 1000));
+}
+
+export type SimplefinSyncWindow = {
+  mode: "hard" | "incremental";
+  startDate: string;
+};
+
+/** Whether this household has never completed a SimpleFIN sync. */
+export function isInitialSimplefinSync(
+  hasSimplefinAccounts: boolean,
+  lastSyncedAt: string | undefined
+): boolean {
+  return !hasSimplefinAccounts || !lastSyncedAt;
+}
+
+/**
+ * Pick the fetch window for the next SimpleFIN request.
+ * Initial sync uses hard refresh; daily sync diffs from the last sync timestamp.
+ */
+export function resolveSimplefinSyncWindow(options: {
+  hasSimplefinAccounts: boolean;
+  lastSyncedAt: string | undefined;
+  accountLastSyncedAt: Array<string | undefined>;
+}): SimplefinSyncWindow {
+  if (
+    isInitialSimplefinSync(
+      options.hasSimplefinAccounts,
+      options.lastSyncedAt
+    )
+  ) {
+    return { mode: "hard", startDate: hardRefreshStartDate() };
+  }
+
+  const starts: number[] = [];
+  if (options.lastSyncedAt) {
+    starts.push(Number(incrementalStartDate(options.lastSyncedAt)));
+  }
+  for (const accountSyncedAt of options.accountLastSyncedAt) {
+    starts.push(
+      Number(
+        accountSyncedAt
+          ? incrementalStartDate(accountSyncedAt)
+          : hardRefreshStartDate()
+      )
+    );
+  }
+
+  return {
+    mode: "incremental",
+    startDate: String(Math.min(...starts)),
+  };
 }

@@ -9,18 +9,19 @@ import type {
   SaveMembersRequest,
   SyncState,
   TaxProfile,
-  Transaction,
-  TransactionFilter,
   UpdateHouseholdRequest,
   UpdateMemberRequest,
 } from "@portfolio/contracts";
 import { resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts";
 import { randomUUID } from "node:crypto";
 import { getContainer } from "../cosmos/client.js";
+import { unavailableTransactions } from "./compositeStore.js";
 import type { PortfolioDataStore } from "./types.js";
 
 export class CosmosPortfolioStore implements PortfolioDataStore {
   readonly mode = "cosmos" as const;
+
+  transactions = unavailableTransactions();
 
   household = {
     list: async (): Promise<Household[]> => {
@@ -312,67 +313,6 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
         })
         .fetchAll();
       return resources[0] ?? null;
-    },
-  };
-
-  transactions = {
-    list: async (
-      householdId: string,
-      filter: TransactionFilter = { limit: 100 }
-    ): Promise<Transaction[]> => {
-      let query = "SELECT * FROM c WHERE c.householdId = @hid";
-      const parameters: { name: string; value: string | number }[] = [
-        { name: "@hid", value: householdId },
-      ];
-      if (filter.accountId) {
-        query += " AND c.accountId = @aid";
-        parameters.push({ name: "@aid", value: filter.accountId });
-      }
-      if (filter.category) {
-        query += " AND c.category = @cat";
-        parameters.push({ name: "@cat", value: filter.category });
-      }
-      if (filter.startDate) {
-        query += " AND c.date >= @start";
-        parameters.push({ name: "@start", value: filter.startDate });
-      }
-      if (filter.endDate) {
-        query += " AND c.date <= @end";
-        parameters.push({ name: "@end", value: filter.endDate });
-      }
-      query += " ORDER BY c.date DESC OFFSET 0 LIMIT @limit";
-      parameters.push({ name: "@limit", value: filter.limit ?? 100 });
-
-      const { resources } = await getContainer("transactions")
-        .items.query<Transaction>({ query, parameters })
-        .fetchAll();
-      return resources;
-    },
-
-    upsert: async (txn: Transaction): Promise<Transaction> => {
-      const { resource } = await getContainer("transactions").items.upsert(txn);
-      return resource as unknown as Transaction;
-    },
-
-    get: async (householdId: string, txnId: string): Promise<Transaction | null> => {
-      const container = getContainer("transactions");
-      try {
-        const { resource } = await container.item(txnId, householdId).read<Transaction>();
-        return resource ?? null;
-      } catch (err: unknown) {
-        if ((err as { code?: number }).code === 404) {
-          const listed = await cosmosPortfolioStore.transactions.list(householdId, {
-            limit: 500,
-          });
-          return listed.find((t) => t.txnId === txnId) ?? null;
-        }
-        throw err;
-      }
-    },
-
-    replace: async (txn: Transaction): Promise<Transaction> => {
-      const { resource } = await getContainer("transactions").items.upsert(txn);
-      return resource as unknown as Transaction;
     },
   };
 

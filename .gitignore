@@ -9,3 +9,5 @@ local.settings.json
 coverage/
 .azure/
 .azurite/
+.local-data/
+.cosmos/

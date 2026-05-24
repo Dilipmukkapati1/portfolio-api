@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - include:
+      file: changes/001-create-transactions.sql
+      relativeToChangelogFile: true
+  - include:
+      file: changes/002-widen-transaction-id-columns.sql
+      relativeToChangelogFile: true
+  - include:
+      file: changes/003-add-transaction-account-name.sql
+      relativeToChangelogFile: true

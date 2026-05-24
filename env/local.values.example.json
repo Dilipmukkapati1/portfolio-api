@@ -1,6 +1,6 @@
 {
   "APP_ENV": "local",
-  "STORAGE_MODE": "memory",
+  "STORAGE_MODE": "cosmos",
   "API_PUBLIC_BASE_URL": "http://localhost:7071",
   "WEB_APP_URL": "http://localhost:3000",
   "DEFAULT_HOUSEHOLD_ID": "local-household",
@@ -10,5 +10,10 @@
   "SNAPTRADE_CLIENT_ID": "",
   "SNAPTRADE_CONSUMER_KEY": "",
   "SNAPTRADE_WEBHOOK_SECRET": "",
-  "SNAPTRADE_REDIRECT_URL": "http://localhost:7071/api/integrations/snaptrade/callback"
+  "SNAPTRADE_REDIRECT_URL": "http://localhost:7071/api/integrations/snaptrade/callback",
+  "AZURE_SQL_SERVER": "localhost",
+  "AZURE_SQL_DATABASE": "portfolio",
+  "AZURE_SQL_USER": "sa",
+  "AZURE_SQL_PASSWORD": "PortfolioDev1!",
+  "AZURE_SQL_ENCRYPT": "false"
 }

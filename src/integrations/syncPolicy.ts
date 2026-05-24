@@ -3,6 +3,17 @@ import { getSecret, secretNameForSimplefin } from "../lib/keyvault.js";
 
 export const SIMPLEFIN_DAILY_LIMIT = 24;
 
+export function simplefinRequestsRemaining(
+  lastSyncedAt: string | undefined,
+  dailyRequestCount: number | undefined,
+  alreadyUsedThisRun = 0
+): number {
+  const today = new Date().toISOString().slice(0, 10);
+  const lastDate = lastSyncedAt?.slice(0, 10);
+  const count = lastDate === today ? (dailyRequestCount ?? 0) : 0;
+  return Math.max(0, SIMPLEFIN_DAILY_LIMIT - count - alreadyUsedThisRun);
+}
+
 export async function isSimplefinConnected(
   householdId: string
 ): Promise<boolean> {

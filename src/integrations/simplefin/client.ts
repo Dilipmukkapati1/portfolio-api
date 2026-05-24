@@ -66,6 +66,7 @@ export interface SimpleFinTransaction {
   memo?: string;
   pending?: boolean;
   transacted_at?: number;
+  extra?: Record<string, unknown>;
 }
 
 export interface SimpleFinAccountsResponse {

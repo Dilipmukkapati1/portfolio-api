@@ -8,6 +8,11 @@ import { holdingRepository } from "../../cosmos/repositories/holdingRepository.j
 import { getSecret, secretNameForSimplefin } from "../../lib/keyvault.js";
 import { categorizeTransaction } from "../manual/categorize.js";
 import {
+  mapProviderCategory,
+  readSimpleFinProviderCategory,
+} from "./categoryMapping.js";
+import { simplefinRequestsRemaining } from "../syncPolicy.js";
+import {
   SimpleFinClient,
   assertValidAccessUrl,
   collectSimpleFinErrors,
@@ -15,14 +20,15 @@ import {
   formatSimpleFinErrors,
   partitionSimpleFinErrors,
   type SimpleFinAccount,
+  type SimpleFinAccountsResponse,
   type SimpleFinHolding,
 } from "./client.js";
 import {
   buildConnectionIndex,
-  defaultTransactionStartDate,
-  SIMPLEFIN_DEFAULT_TRANSACTION_DAYS,
+  hardRefreshStartDate,
   hasSimpleFinSecurities,
   inferAccountType,
+  resolveSimplefinSyncWindow,
   resolveInstitutionName,
   resolveSyncedAccountType,
   simpleFinAccountDocumentId,
@@ -51,90 +57,89 @@ export async function syncSimplefinForHousehold(
   assertValidAccessUrl(accessUrl);
 
   const client = new SimpleFinClient(accessUrl);
-  const startDate = defaultTransactionStartDate(SIMPLEFIN_DEFAULT_TRANSACTION_DAYS);
-  const data = await client.fetchAccounts(startDate);
   const now = new Date().toISOString();
+  const previousSyncState = await integrationRepository.getSyncState(
+    householdId,
+    "simplefin"
+  );
+  const existingAccounts = await accountRepository.listByHousehold(householdId);
+  const knownSimplefinAccounts = existingAccounts.filter(
+    (account) => account.source === "simplefin"
+  );
+  const syncWindow = resolveSimplefinSyncWindow({
+    hasSimplefinAccounts: knownSimplefinAccounts.length > 0,
+    lastSyncedAt: previousSyncState?.lastSyncedAt,
+    accountLastSyncedAt: knownSimplefinAccounts
+      .filter((account) => account.isActive)
+      .map((account) => account.lastSyncedAt),
+  });
+
+  let apiRequestCount = 0;
+  let data = await client.fetchAccounts(syncWindow.startDate);
+  apiRequestCount++;
+
   const connections = buildConnectionIndex(data.connections);
   const allErrors = collectSimpleFinErrors(data);
   const { fatal, informational } = partitionSimpleFinErrors(allErrors);
   const warnings = [...informational, ...fatal]
     .map((e) => e.msg ?? e.message ?? e.code)
     .filter((msg): msg is string => Boolean(msg));
+
   const syncedAccountIds = new Set<string>();
+  const newAccountIds = new Set<string>();
   let txnCount = 0;
   let holdingCount = 0;
 
-  for (const sfAccount of data.accounts ?? []) {
-    const connId = sfAccount.conn_id ?? "default";
-    const externalId = simpleFinExternalId(connId, sfAccount.id);
-    const accountId = await resolveAccountDocumentId(
-      householdId,
-      connId,
-      sfAccount
-    );
-    syncedAccountIds.add(accountId);
+  const firstPass = await processSimplefinResponse(data, {
+    householdId,
+    now,
+    connections,
+    existingAccounts,
+    syncedAccountIds,
+    newAccountIds,
+  });
+  txnCount += firstPass.transactions;
+  holdingCount += firstPass.holdings;
 
-    const existing = await accountRepository.findByExternalId(
+  if (
+    syncWindow.mode === "incremental" &&
+    newAccountIds.size > 0 &&
+    simplefinRequestsRemaining(
+      previousSyncState?.lastSyncedAt,
+      previousSyncState?.dailyRequestCount,
+      apiRequestCount
+    ) > 0
+  ) {
+    const hardData = await client.fetchAccounts(hardRefreshStartDate());
+    apiRequestCount++;
+    const hardPass = await processSimplefinResponse(hardData, {
       householdId,
-      "simplefin",
-      externalId
-    );
-    const legacyExisting =
-      existing ??
-      (await accountRepository.findByExternalId(
-        householdId,
-        "simplefin",
-        sfAccount.id
-      ));
-
-    const balance = parseFloat(sfAccount.balance) || 0;
-    const sfHoldings = extractSimpleFinHoldings(sfAccount);
-    const account: Account = {
-      id: accountId,
-      householdId,
-      accountId,
-      source: "simplefin",
-      externalId,
-      displayName: sfAccount.name,
-      institutionName: resolveInstitutionName(sfAccount, connections),
-      accountType: resolveSyncedAccountType(
-        sfAccount.name,
-        balance,
-        sfHoldings
-      ),
-      balance,
-      currency: sfAccount.currency ?? "USD",
-      isActive: true,
-      lastSyncedAt: now,
-      createdAt: legacyExisting?.createdAt ?? now,
-      updatedAt: now,
-    };
-    await accountRepository.upsert(account);
-
-    txnCount += await syncAccountTransactions(
-      householdId,
-      accountId,
-      sfAccount,
-      now
-    );
-    holdingCount += await syncAccountHoldings(
-      householdId,
-      accountId,
-      sfAccount,
-      now
+      now,
+      connections: buildConnectionIndex(hardData.connections),
+      existingAccounts,
+      syncedAccountIds,
+      newAccountIds,
+      accountFilter: newAccountIds,
+    });
+    txnCount += hardPass.transactions;
+    holdingCount += hardPass.holdings;
+  } else if (
+    syncWindow.mode === "incremental" &&
+    newAccountIds.size > 0
+  ) {
+    warnings.push(
+      "New SimpleFIN account(s) detected but daily request limit prevented a hard refresh backfill."
     );
   }
 
   await deactivateMissingSimplefinAccounts(householdId, syncedAccountIds, now);
 
-  const previousSyncState = await integrationRepository.getSyncState(
-    householdId,
-    "simplefin"
-  );
   const today = now.slice(0, 10);
   const previousDate = previousSyncState?.lastSyncedAt?.slice(0, 10);
   const dailyRequestCount =
-    previousDate === today ? (previousSyncState?.dailyRequestCount ?? 0) + 1 : 1;
+    previousDate === today
+      ? (previousSyncState?.dailyRequestCount ?? 0) + apiRequestCount
+      : apiRequestCount;
 
   await integrationRepository.upsertSyncState({
     id: "simplefin",
@@ -155,6 +160,107 @@ export async function syncSimplefinForHousehold(
     holdings: holdingCount,
     ...(warnings.length > 0 ? { warnings } : {}),
   };
+}
+
+type ProcessSimplefinResponseOptions = {
+  householdId: string;
+  now: string;
+  connections: ReturnType<typeof buildConnectionIndex>;
+  existingAccounts: Account[];
+  syncedAccountIds: Set<string>;
+  newAccountIds: Set<string>;
+  accountFilter?: Set<string>;
+};
+
+async function processSimplefinResponse(
+  data: SimpleFinAccountsResponse,
+  options: ProcessSimplefinResponseOptions
+): Promise<{ transactions: number; holdings: number }> {
+  let txnCount = 0;
+  let holdingCount = 0;
+
+  for (const sfAccount of data.accounts ?? []) {
+    const connId = sfAccount.conn_id ?? "default";
+    const externalId = simpleFinExternalId(connId, sfAccount.id);
+    const accountId = await resolveAccountDocumentId(
+      options.householdId,
+      connId,
+      sfAccount
+    );
+
+    if (options.accountFilter && !options.accountFilter.has(accountId)) {
+      continue;
+    }
+
+    options.syncedAccountIds.add(accountId);
+
+    const existing = findExistingSimplefinAccount(
+      options.existingAccounts,
+      externalId,
+      sfAccount.id
+    );
+    if (!existing) {
+      options.newAccountIds.add(accountId);
+    }
+
+    const balance = parseFloat(sfAccount.balance) || 0;
+    const sfHoldings = extractSimpleFinHoldings(sfAccount);
+    const account: Account = {
+      id: accountId,
+      householdId: options.householdId,
+      accountId,
+      source: "simplefin",
+      externalId,
+      displayName: sfAccount.name,
+      institutionName: resolveInstitutionName(sfAccount, options.connections),
+      accountType: resolveSyncedAccountType(
+        sfAccount.name,
+        balance,
+        sfHoldings
+      ),
+      balance,
+      currency: sfAccount.currency ?? "USD",
+      isActive: true,
+      lastSyncedAt: options.now,
+      createdAt: existing?.createdAt ?? options.now,
+      updatedAt: options.now,
+    };
+    await accountRepository.upsert(account);
+
+    txnCount += await syncAccountTransactions(
+      options.householdId,
+      account,
+      sfAccount,
+      options.now
+    );
+    holdingCount += await syncAccountHoldings(
+      options.householdId,
+      accountId,
+      sfAccount,
+      options.now
+    );
+  }
+
+  return { transactions: txnCount, holdings: holdingCount };
+}
+
+function findExistingSimplefinAccount(
+  existingAccounts: Account[],
+  externalId: string,
+  legacyExternalId: string
+): Account | null {
+  return (
+    existingAccounts.find(
+      (account) =>
+        account.source === "simplefin" && account.externalId === externalId
+    ) ??
+    existingAccounts.find(
+      (account) =>
+        account.source === "simplefin" &&
+        account.externalId === legacyExternalId
+    ) ??
+    null
+  );
 }
 
 async function resolveAccountDocumentId(
@@ -180,51 +286,122 @@ async function resolveAccountDocumentId(
   return simpleFinAccountDocumentId(connId, sfAccount.id);
 }
 
+function formatTransactionAccountName(account: Account): string {
+  const name = account.displayName.trim();
+  const institution = account.institutionName?.trim();
+  if (institution && institution !== name) {
+    return `${institution} — ${name}`;
+  }
+  return name;
+}
+
 async function syncAccountTransactions(
   householdId: string,
-  accountId: string,
+  account: Account,
   sfAccount: SimpleFinAccount,
   now: string
 ): Promise<number> {
   const existingTxns = await transactionRepository.list(householdId, {
-    accountId,
+    accountId: account.accountId,
     limit: 500,
   });
-  const existingById = new Map(
+  const existingByTxnId = new Map(
     existingTxns.map((txn) => [txn.txnId, txn] as const)
+  );
+  const existingByExternalId = new Map(
+    existingTxns
+      .filter((txn) => txn.externalId)
+      .map((txn) => [txn.externalId!, txn] as const)
   );
 
   let count = 0;
   for (const sfTxn of sfAccount.transactions ?? []) {
-    const txnId = `sf-txn-${accountId}-${sfTxn.id}`;
+    const matched =
+      existingByExternalId.get(sfTxn.id) ??
+      existingByTxnId.get(`sf-txn-${account.accountId}-${sfTxn.id}`);
+    const txnId = matched?.txnId ?? `sf-txn-${account.accountId}-${sfTxn.id}`;
     const amount = parseFloat(sfTxn.amount) || 0;
-    const date = sfTxn.posted
-      ? new Date(sfTxn.posted * 1000).toISOString().slice(0, 10)
-      : now.slice(0, 10);
+    const postedAt =
+      sfTxn.posted && sfTxn.posted > 0
+        ? new Date(sfTxn.posted * 1000).toISOString()
+        : undefined;
+    const transactedAt = sfTxn.transacted_at
+      ? new Date(sfTxn.transacted_at * 1000).toISOString()
+      : undefined;
+    const date = (transactedAt ?? postedAt ?? now).slice(0, 10);
     const description =
       sfTxn.description?.trim() ||
       sfTxn.payee?.trim() ||
       sfTxn.memo?.trim() ||
       "Transaction";
+    const providerCategory = readSimpleFinProviderCategory(sfTxn.extra);
+    const categoryDecision = resolveSyncedCategory({
+      matched,
+      providerCategory,
+      description,
+      amount,
+    });
+
     const txn: Transaction = {
       id: txnId,
       householdId,
       txnId,
-      accountId,
+      accountId: account.accountId,
+      accountName: formatTransactionAccountName(account),
+      source: account.source,
       amount,
+      currency: account.currency ?? "USD",
       date,
+      transactedAt,
+      postedAt,
       description,
+      memo: sfTxn.memo?.trim() || undefined,
       merchant: sfTxn.payee,
-      category: categorizeTransaction(description, amount),
+      category: categoryDecision.category,
+      categorySource: categoryDecision.categorySource,
+      providerCategory,
       pending: sfTxn.pending ?? false,
       externalId: sfTxn.id,
-      createdAt: existingById.get(txnId)?.createdAt ?? now,
+      createdAt: matched?.createdAt ?? now,
       updatedAt: now,
     };
     await transactionRepository.upsert(txn);
     count++;
   }
   return count;
+}
+
+function resolveSyncedCategory(input: {
+  matched: Transaction | undefined;
+  providerCategory: string | undefined;
+  description: string;
+  amount: number;
+}): { category: Transaction["category"]; categorySource: Transaction["categorySource"] } {
+  if (input.matched?.categorySource === "user") {
+    return {
+      category: input.matched.category,
+      categorySource: "user",
+    };
+  }
+
+  if (input.providerCategory) {
+    const mapped = mapProviderCategory(input.providerCategory);
+    if (mapped) {
+      return { category: mapped, categorySource: "provider" };
+    }
+  }
+
+  if (input.matched && input.matched.category !== "uncategorized") {
+    return {
+      category: input.matched.category,
+      categorySource: input.matched.categorySource ?? "auto",
+    };
+  }
+
+  return {
+    category: categorizeTransaction(input.description, input.amount),
+    categorySource: "auto",
+  };
 }
 
 const CASH_SYMBOL = "CASH";

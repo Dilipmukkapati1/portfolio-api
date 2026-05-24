@@ -34,10 +34,12 @@ export async function categorizeHouseholdTransactions(
   const txns = await transactionRepository.list(householdId, { limit: 500 });
   let updated = 0;
   for (const txn of txns) {
+    if (txn.categorySource === "user") continue;
     if (txn.category !== "uncategorized") continue;
     const category = categorizeTransaction(txn.description, txn.amount);
     if (category !== txn.category) {
       txn.category = category;
+      txn.categorySource = "auto";
       txn.updatedAt = new Date().toISOString();
       await transactionRepository.upsert(txn);
       updated++;

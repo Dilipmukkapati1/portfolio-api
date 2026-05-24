@@ -17,7 +17,7 @@ import type {
 } from "@portfolio/contracts";
 
 export interface PortfolioDataStore {
-  readonly mode: "cosmos" | "memory";
+  readonly mode: "cosmos" | "memory" | "disk";
 
   household: {
     list(): Promise<Household[]>;
@@ -67,6 +67,7 @@ export interface PortfolioDataStore {
     upsert(txn: Transaction): Promise<Transaction>;
     get(householdId: string, txnId: string): Promise<Transaction | null>;
     replace(txn: Transaction): Promise<Transaction>;
+    deleteAllForHousehold(householdId: string): Promise<void>;
   };
 
   holdings: {

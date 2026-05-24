@@ -223,6 +223,30 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
           },
         },
       },
+      "/api/transactions/summary": {
+        get: {
+          tags: ["Transactions"],
+          summary: "Summarize transactions for a date range",
+          operationId: "summarizeTransactions",
+          parameters: [
+            { name: "startDate", in: "query", required: true, schema: { type: "string" } },
+            { name: "endDate", in: "query", required: true, schema: { type: "string" } },
+            { name: "accountId", in: "query", schema: { type: "string" } },
+          ],
+          responses: {
+            "200": {
+              description: "Period summary",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/TransactionSummaryResponse" },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/BadRequest" },
+            "503": { description: "Azure SQL unavailable" },
+          },
+        },
+      },
       "/api/transactions/categorize": {
         post: {
           tags: ["Transactions"],
@@ -653,14 +677,35 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
             householdId: { type: "string" },
             txnId: { type: "string" },
             accountId: { type: "string" },
+            accountName: { type: "string" },
+            source: { type: "string", enum: ["simplefin", "snaptrade", "manual"] },
             amount: { type: "number" },
+            currency: { type: "string" },
             date: { type: "string" },
+            transactedAt: { type: "string", format: "date-time" },
+            postedAt: { type: "string", format: "date-time" },
             description: { type: "string" },
+            memo: { type: "string" },
             merchant: { type: "string" },
             category: { type: "string", enum: [...transactionCategoryEnum] },
+            categorySource: { type: "string", enum: ["auto", "user", "provider"] },
+            providerCategory: { type: "string" },
             pending: { type: "boolean" },
+            externalId: { type: "string" },
             createdAt: { type: "string", format: "date-time" },
             updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        TransactionSummaryResponse: {
+          type: "object",
+          properties: {
+            totalCredits: { type: "number" },
+            totalSpend: { type: "number" },
+            spendByCategory: {
+              type: "object",
+              additionalProperties: { type: "number" },
+            },
+            transactionCount: { type: "integer" },
           },
         },
         CategorizeTransactionRequest: {

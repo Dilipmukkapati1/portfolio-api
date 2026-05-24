@@ -1,5 +1,10 @@
 import { getConfig, readHouseholdEnv } from "./config.js";
 
+function readEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value || undefined;
+}
+
 /** Map Key Vault secret names to environment variables (local / App Settings). */
 export function getEnvSecret(name: string): string | undefined {
   const { integrations } = getConfig();
@@ -13,6 +18,8 @@ export function getEnvSecret(name: string): string | undefined {
       return integrations.snaptrade.consumerKey;
     case "snaptrade-webhook-secret":
       return integrations.snaptrade.webhookSecret;
+    case "azure-sql-connection-string":
+      return readEnv("AZURE_SQL_CONNECTION_STRING");
     default:
       break;
   }

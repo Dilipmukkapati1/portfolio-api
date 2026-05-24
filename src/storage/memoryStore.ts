@@ -18,6 +18,18 @@ import { resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts"
 import { randomUUID } from "node:crypto";
 import type { PortfolioDataStore } from "./types.js";
 
+export interface MemoryStoreSnapshot {
+  households: Household[];
+  memberData: Record<string, Member[]>;
+  taxProfileData: Record<string, TaxProfile[]>;
+  accountData: Record<string, Account[]>;
+  transactionData: Record<string, Transaction[]>;
+  holdingData: Record<string, Holding[]>;
+  integrationTokens: Record<string, IntegrationToken[]>;
+  syncState: Record<string, SyncState[]>;
+  webhookEvents: Array<{ key: string; householdId: string; eventId: string }>;
+}
+
 function partitionMap<T extends { householdId: string; id: string }>() {
   return new Map<string, Map<string, T>>();
 }
@@ -260,6 +272,12 @@ export class MemoryPortfolioStore implements PortfolioDataStore {
       if (filter.category) {
         rows = rows.filter((t) => t.category === filter.category);
       }
+      if (filter.source) {
+        rows = rows.filter((t) => t.source === filter.source);
+      }
+      if (filter.pending !== undefined) {
+        rows = rows.filter((t) => t.pending === filter.pending);
+      }
       if (filter.startDate) {
         rows = rows.filter((t) => t.date >= filter.startDate!);
       }
@@ -283,6 +301,10 @@ export class MemoryPortfolioStore implements PortfolioDataStore {
     replace: async (txn: Transaction) => {
       getPartition(this.transactionData, txn.householdId).set(txn.id, txn);
       return txn;
+    },
+
+    deleteAllForHousehold: async (householdId: string) => {
+      this.transactionData.delete(householdId);
     },
   };
 
@@ -329,4 +351,62 @@ export class MemoryPortfolioStore implements PortfolioDataStore {
       return true;
     },
   };
+
+  toSnapshot(): MemoryStoreSnapshot {
+    return {
+      households: [...this.households.values()],
+      memberData: partitionMapToArrays(this.memberData),
+      taxProfileData: partitionMapToArrays(this.taxProfileData),
+      accountData: partitionMapToArrays(this.accountData),
+      transactionData: partitionMapToArrays(this.transactionData),
+      holdingData: partitionMapToArrays(this.holdingData),
+      integrationTokens: partitionMapToArrays(this.integrationTokens),
+      syncState: partitionMapToArrays(this.syncState),
+      webhookEvents: [...this.webhookEvents.entries()].map(([key, value]) => ({
+        key,
+        ...value,
+      })),
+    };
+  }
+
+  loadSnapshot(snapshot: MemoryStoreSnapshot): void {
+    this.households = new Map(snapshot.households.map((h) => [h.householdId, h]));
+    this.memberData = arraysToPartitionMap(snapshot.memberData);
+    this.taxProfileData = arraysToPartitionMap(snapshot.taxProfileData);
+    this.accountData = arraysToPartitionMap(snapshot.accountData);
+    this.transactionData = arraysToPartitionMap(snapshot.transactionData ?? {});
+    this.holdingData = arraysToPartitionMap(snapshot.holdingData);
+    this.integrationTokens = arraysToPartitionMap(snapshot.integrationTokens);
+    this.syncState = arraysToPartitionMap(snapshot.syncState);
+    this.webhookEvents = new Map(
+      snapshot.webhookEvents.map(({ key, householdId, eventId }) => [
+        key,
+        { householdId, eventId },
+      ])
+    );
+  }
+}
+
+function partitionMapToArrays<T extends { id: string }>(
+  root: Map<string, Map<string, T>>
+): Record<string, T[]> {
+  const out: Record<string, T[]> = {};
+  for (const [householdId, part] of root) {
+    out[householdId] = [...part.values()];
+  }
+  return out;
+}
+
+function arraysToPartitionMap<T extends { id: string }>(
+  data: Record<string, T[]>
+): Map<string, Map<string, T>> {
+  const root = new Map<string, Map<string, T>>();
+  for (const [householdId, items] of Object.entries(data)) {
+    const part = new Map<string, T>();
+    for (const item of items) {
+      part.set(item.id, item);
+    }
+    root.set(householdId, part);
+  }
+  return root;
 }

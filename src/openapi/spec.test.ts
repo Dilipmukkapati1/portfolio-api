@@ -24,6 +24,7 @@ describe("buildOpenApiSpec", () => {
         "/api/tax/strategies",
         "/api/transactions",
         "/api/transactions/categorize",
+        "/api/transactions/summary",
       ].sort()
     );
   });
