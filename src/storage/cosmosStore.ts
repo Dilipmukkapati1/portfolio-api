@@ -1,0 +1,449 @@
+import type {
+  Account,
+  CreateHouseholdRequest,
+  CreateMemberRequest,
+  Holding,
+  Household,
+  IntegrationToken,
+  Member,
+  SaveMembersRequest,
+  SyncState,
+  TaxProfile,
+  Transaction,
+  TransactionFilter,
+  UpdateHouseholdRequest,
+  UpdateMemberRequest,
+} from "@portfolio/contracts";
+import { resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts";
+import { randomUUID } from "node:crypto";
+import { getContainer } from "../cosmos/client.js";
+import type { PortfolioDataStore } from "./types.js";
+
+export class CosmosPortfolioStore implements PortfolioDataStore {
+  readonly mode = "cosmos" as const;
+
+  household = {
+    list: async (): Promise<Household[]> => {
+      const { resources } = await getContainer("households")
+        .items.readAll<Household>()
+        .fetchAll();
+      return resources ?? [];
+    },
+
+    get: async (householdId: string): Promise<Household | null> => {
+      const container = getContainer("households");
+      try {
+        const { resource } = await container
+          .item(householdId, householdId)
+          .read<Household>();
+        return resource ?? null;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return null;
+        throw err;
+      }
+    },
+
+    create: async (
+      householdId: string,
+      data: CreateHouseholdRequest
+    ): Promise<Household> => {
+      const now = new Date().toISOString();
+      const primaryState = resolvePrimaryState(data);
+      const doc: Household = {
+        id: householdId,
+        householdId,
+        displayName: data.displayName,
+        primaryState,
+        state: primaryState,
+        persona: data.persona,
+        settings: data.settings,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await getContainer("households").items.create(doc);
+      return doc;
+    },
+
+    update: async (
+      householdId: string,
+      data: UpdateHouseholdRequest
+    ): Promise<Household> => {
+      const existing = await cosmosPortfolioStore.household.get(householdId);
+      if (!existing) throw new Error("Household not found");
+      const primaryState =
+        data.primaryState || data.state
+          ? resolvePrimaryState({
+              primaryState: data.primaryState,
+              state: data.state ?? existing.state,
+            })
+          : existing.primaryState ?? existing.state;
+      const updated: Household = {
+        ...existing,
+        ...data,
+        primaryState,
+        state: primaryState,
+        updatedAt: new Date().toISOString(),
+      };
+      await getContainer("households")
+        .item(householdId, householdId)
+        .replace(updated);
+      return updated;
+    },
+
+    delete: async (householdId: string): Promise<boolean> => {
+      try {
+        await cosmosPortfolioStore.members.deleteAllForHousehold(householdId);
+        await cosmosPortfolioStore.taxProfiles.deleteAllForHousehold(householdId);
+        await getContainer("households")
+          .item(householdId, householdId)
+          .delete();
+        return true;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return false;
+        throw err;
+      }
+    },
+
+    updateNetWorthSummary: async (
+      householdId: string,
+      summary: Household["netWorthSummary"]
+    ) => {
+      const existing = await cosmosPortfolioStore.household.get(householdId);
+      if (!existing) return;
+      existing.netWorthSummary = summary;
+      existing.updatedAt = new Date().toISOString();
+      await getContainer("households")
+        .item(householdId, householdId)
+        .replace(existing);
+    },
+  };
+
+  members = {
+    listByHousehold: async (householdId: string): Promise<Member[]> => {
+      const { resources } = await getContainer("members")
+        .items.query<Member>({
+          query: "SELECT * FROM c WHERE c.householdId = @hid",
+          parameters: [{ name: "@hid", value: householdId }],
+        })
+        .fetchAll();
+      return resources.sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    get: async (householdId: string, memberId: string): Promise<Member | null> => {
+      try {
+        const { resource } = await getContainer("members")
+          .item(memberId, householdId)
+          .read<Member>();
+        return resource ?? null;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return null;
+        throw err;
+      }
+    },
+
+    create: async (
+      householdId: string,
+      data: CreateMemberRequest
+    ): Promise<Member> => {
+      const now = new Date().toISOString();
+      const doc: Member = {
+        id: randomUUID(),
+        householdId,
+        name: data.name,
+        relationship: data.relationship,
+        dateOfBirth: data.dateOfBirth,
+        userId: data.userId,
+        isActive: data.isActive ?? true,
+        incomeSources: data.incomeSources ?? [],
+        contributions: data.contributions ?? [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      await getContainer("members").items.create(doc);
+      return doc;
+    },
+
+    update: async (
+      householdId: string,
+      memberId: string,
+      data: UpdateMemberRequest
+    ): Promise<Member> => {
+      const existing = await cosmosPortfolioStore.members.get(
+        householdId,
+        memberId
+      );
+      if (!existing) throw new Error("Member not found");
+      const updated: Member = {
+        ...existing,
+        ...data,
+        updatedAt: new Date().toISOString(),
+      };
+      await getContainer("members")
+        .item(memberId, householdId)
+        .replace(updated);
+      return updated;
+    },
+
+    delete: async (householdId: string, memberId: string): Promise<boolean> => {
+      try {
+        await getContainer("members").item(memberId, householdId).delete();
+        return true;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return false;
+        throw err;
+      }
+    },
+
+    replaceAll: async (
+      householdId: string,
+      payload: SaveMembersRequest
+    ): Promise<Member[]> => {
+      const existing = await cosmosPortfolioStore.members.listByHousehold(
+        householdId
+      );
+      for (const m of existing) {
+        await cosmosPortfolioStore.members.delete(householdId, m.id);
+      }
+      const now = new Date().toISOString();
+      const created: Member[] = [];
+      for (const m of payload.members) {
+        const doc: Member = {
+          id: m.id ?? randomUUID(),
+          householdId,
+          name: m.name,
+          relationship: m.relationship,
+          dateOfBirth: m.dateOfBirth,
+          userId: m.userId,
+          isActive: m.isActive ?? true,
+          incomeSources: m.incomeSources ?? [],
+          contributions: m.contributions ?? [],
+          createdAt: now,
+          updatedAt: now,
+        };
+        await getContainer("members").items.create(doc);
+        created.push(doc);
+      }
+      return created;
+    },
+
+    deleteAllForHousehold: async (householdId: string) => {
+      const members = await cosmosPortfolioStore.members.listByHousehold(
+        householdId
+      );
+      for (const m of members) {
+        await getContainer("members").item(m.id, householdId).delete();
+      }
+    },
+  };
+
+  taxProfiles = {
+    get: async (householdId: string, taxYear: number): Promise<TaxProfile | null> => {
+      const id = taxProfileDocumentId(householdId, taxYear);
+      try {
+        const { resource } = await getContainer("taxProfiles")
+          .item(id, householdId)
+          .read<TaxProfile>();
+        return resource ?? null;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return null;
+        throw err;
+      }
+    },
+
+    upsert: async (profile: TaxProfile): Promise<TaxProfile> => {
+      const { resource } = await getContainer("taxProfiles").items.upsert(profile);
+      return resource as unknown as TaxProfile;
+    },
+
+    delete: async (householdId: string, taxYear: number): Promise<boolean> => {
+      const id = taxProfileDocumentId(householdId, taxYear);
+      try {
+        await getContainer("taxProfiles").item(id, householdId).delete();
+        return true;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return false;
+        throw err;
+      }
+    },
+
+    deleteAllForHousehold: async (householdId: string) => {
+      const { resources } = await getContainer("taxProfiles")
+        .items.query<TaxProfile>({
+          query: "SELECT * FROM c WHERE c.householdId = @hid",
+          parameters: [{ name: "@hid", value: householdId }],
+        })
+        .fetchAll();
+      for (const p of resources) {
+        await getContainer("taxProfiles").item(p.id, householdId).delete();
+      }
+    },
+  };
+
+  accounts = {
+    listByHousehold: async (householdId: string): Promise<Account[]> => {
+      const { resources } = await getContainer("accounts")
+        .items.query<Account>({
+          query: "SELECT * FROM c WHERE c.householdId = @hid",
+          parameters: [{ name: "@hid", value: householdId }],
+        })
+        .fetchAll();
+      return resources;
+    },
+
+    upsert: async (account: Account): Promise<Account> => {
+      const { resource } = await getContainer("accounts").items.upsert(account);
+      return resource as unknown as Account;
+    },
+
+    findByExternalId: async (
+      householdId: string,
+      source: string,
+      externalId: string
+    ): Promise<Account | null> => {
+      const { resources } = await getContainer("accounts")
+        .items.query<Account>({
+          query:
+            "SELECT * FROM c WHERE c.householdId = @hid AND c.source = @src AND c.externalId = @eid",
+          parameters: [
+            { name: "@hid", value: householdId },
+            { name: "@src", value: source },
+            { name: "@eid", value: externalId },
+          ],
+        })
+        .fetchAll();
+      return resources[0] ?? null;
+    },
+  };
+
+  transactions = {
+    list: async (
+      householdId: string,
+      filter: TransactionFilter = { limit: 100 }
+    ): Promise<Transaction[]> => {
+      let query = "SELECT * FROM c WHERE c.householdId = @hid";
+      const parameters: { name: string; value: string | number }[] = [
+        { name: "@hid", value: householdId },
+      ];
+      if (filter.accountId) {
+        query += " AND c.accountId = @aid";
+        parameters.push({ name: "@aid", value: filter.accountId });
+      }
+      if (filter.category) {
+        query += " AND c.category = @cat";
+        parameters.push({ name: "@cat", value: filter.category });
+      }
+      if (filter.startDate) {
+        query += " AND c.date >= @start";
+        parameters.push({ name: "@start", value: filter.startDate });
+      }
+      if (filter.endDate) {
+        query += " AND c.date <= @end";
+        parameters.push({ name: "@end", value: filter.endDate });
+      }
+      query += " ORDER BY c.date DESC OFFSET 0 LIMIT @limit";
+      parameters.push({ name: "@limit", value: filter.limit ?? 100 });
+
+      const { resources } = await getContainer("transactions")
+        .items.query<Transaction>({ query, parameters })
+        .fetchAll();
+      return resources;
+    },
+
+    upsert: async (txn: Transaction): Promise<Transaction> => {
+      const { resource } = await getContainer("transactions").items.upsert(txn);
+      return resource as unknown as Transaction;
+    },
+
+    get: async (householdId: string, txnId: string): Promise<Transaction | null> => {
+      const container = getContainer("transactions");
+      try {
+        const { resource } = await container.item(txnId, householdId).read<Transaction>();
+        return resource ?? null;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) {
+          const listed = await cosmosPortfolioStore.transactions.list(householdId, {
+            limit: 500,
+          });
+          return listed.find((t) => t.txnId === txnId) ?? null;
+        }
+        throw err;
+      }
+    },
+
+    replace: async (txn: Transaction): Promise<Transaction> => {
+      const { resource } = await getContainer("transactions").items.upsert(txn);
+      return resource as unknown as Transaction;
+    },
+  };
+
+  holdings = {
+    listByHousehold: async (householdId: string): Promise<Holding[]> => {
+      const { resources } = await getContainer("holdings")
+        .items.query<Holding>({
+          query: "SELECT * FROM c WHERE c.householdId = @hid",
+          parameters: [{ name: "@hid", value: householdId }],
+        })
+        .fetchAll();
+      return resources;
+    },
+
+    upsert: async (holding: Holding): Promise<Holding> => {
+      const { resource } = await getContainer("holdings").items.upsert(holding);
+      return resource as unknown as Holding;
+    },
+  };
+
+  integrations = {
+    getToken: async (householdId: string, provider: string) => {
+      try {
+        const { resource } = await getContainer("integrationTokens")
+          .item(provider, householdId)
+          .read<IntegrationToken>();
+        return resource ?? null;
+      } catch {
+        return null;
+      }
+    },
+
+    upsertToken: async (token: IntegrationToken) => {
+      await getContainer("integrationTokens").items.upsert(token);
+    },
+
+    getSyncState: async (householdId: string, provider: string) => {
+      try {
+        const { resource } = await getContainer("syncState")
+          .item(provider, householdId)
+          .read<SyncState>();
+        return resource ?? null;
+      } catch {
+        return null;
+      }
+    },
+
+    upsertSyncState: async (state: SyncState) => {
+      await getContainer("syncState").items.upsert(state);
+    },
+
+    recordWebhookEvent: async (
+      householdId: string,
+      eventId: string,
+      payload: Record<string, unknown>
+    ) => {
+      try {
+        await getContainer("webhookEvents").items.create({
+          id: eventId,
+          householdId,
+          eventId,
+          payload,
+          receivedAt: new Date().toISOString(),
+        });
+        return true;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 409) return false;
+        throw err;
+      }
+    },
+  };
+}
+
+export const cosmosPortfolioStore = new CosmosPortfolioStore();

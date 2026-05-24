@@ -31,6 +31,16 @@ export async function processQueueMessage(raw: string): Promise<void> {
     case "run.batch.projection":
       console.log("Batch projection deferred to Phase 2+", message);
       break;
+    case "recompute.taxProfile": {
+      const { recomputeTaxProfile } = await import("./householdTaxService.js");
+      const year =
+        message.taxYear ?? new Date().getFullYear();
+      await recomputeTaxProfile(message.householdId, year);
+      break;
+    }
+    case "rollup.monthlySpend":
+      console.log("Monthly spend rollup deferred to Phase 2+", message);
+      break;
     default:
       console.warn("Unknown queue message", message);
   }

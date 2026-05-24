@@ -1,6 +1,9 @@
 import "./functions/docs.js";
 import "./functions/health.js";
 import "./functions/household.js";
+import "./functions/households.js";
+import "./functions/members.js";
+import "./functions/taxProfiles.js";
 import "./functions/accounts.js";
 import "./functions/transactions.js";
 import "./functions/holdings.js";
