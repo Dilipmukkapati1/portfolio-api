@@ -1,5 +1,5 @@
-# Local Azure Storage emulator for Functions (timers, queues, blobs).
-# Start before `npm start`: npm run storage:start
+# Local emulators for Functions + Cosmos.
+# Start before `npm start`: npm run dev:deps
 services:
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite:latest
@@ -13,8 +13,19 @@ services:
       --queueHost 0.0.0.0
       --tableHost 0.0.0.0
       --location /data
+      --skipApiVersionCheck
     volumes:
       - azurite-data:/data
+
+  cosmos-emulator:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    ports:
+      - "8081:8081"
+      - "1234:1234"
+    environment:
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: 10
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "false"
+    mem_limit: 3g
 
 volumes:
   azurite-data:

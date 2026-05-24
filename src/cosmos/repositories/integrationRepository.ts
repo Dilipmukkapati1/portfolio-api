@@ -1,45 +1,31 @@
 import type { IntegrationToken, SyncState } from "@portfolio/contracts";
-import { getContainer } from "../client.js";
+import { getDataStore } from "../../storage/index.js";
 
 export class IntegrationRepository {
   async getToken(
     householdId: string,
     provider: string
   ): Promise<IntegrationToken | null> {
-    const container = getContainer("integrationTokens");
-    try {
-      const { resource } = await container
-        .item(provider, householdId)
-        .read<IntegrationToken>();
-      return resource ?? null;
-    } catch {
-      return null;
-    }
+    const store = await getDataStore();
+    return store.integrations.getToken(householdId, provider);
   }
 
   async upsertToken(token: IntegrationToken): Promise<void> {
-    const container = getContainer("integrationTokens");
-    await container.items.upsert(token);
+    const store = await getDataStore();
+    return store.integrations.upsertToken(token);
   }
 
   async getSyncState(
     householdId: string,
     provider: string
   ): Promise<SyncState | null> {
-    const container = getContainer("syncState");
-    try {
-      const { resource } = await container
-        .item(provider, householdId)
-        .read<SyncState>();
-      return resource ?? null;
-    } catch {
-      return null;
-    }
+    const store = await getDataStore();
+    return store.integrations.getSyncState(householdId, provider);
   }
 
   async upsertSyncState(state: SyncState): Promise<void> {
-    const container = getContainer("syncState");
-    await container.items.upsert(state);
+    const store = await getDataStore();
+    return store.integrations.upsertSyncState(state);
   }
 
   async recordWebhookEvent(
@@ -47,20 +33,8 @@ export class IntegrationRepository {
     eventId: string,
     payload: Record<string, unknown>
   ): Promise<boolean> {
-    const container = getContainer("webhookEvents");
-    try {
-      await container.items.create({
-        id: eventId,
-        householdId,
-        eventId,
-        payload,
-        receivedAt: new Date().toISOString(),
-      });
-      return true;
-    } catch (err: unknown) {
-      if ((err as { code?: number }).code === 409) return false;
-      throw err;
-    }
+    const store = await getDataStore();
+    return store.integrations.recordWebhookEvent(householdId, eventId, payload);
   }
 }
 

@@ -9,7 +9,9 @@ async function accountsHandler(
 ): Promise<HttpResponseInit> {
   const auth = getAuthContext(request);
   const accounts = await accountRepository.listByHousehold(auth.householdId);
-  return jsonResponse({ accounts });
+  return jsonResponse({
+    accounts: accounts.filter((a) => a.isActive !== false),
+  });
 }
 
 app.http("accounts", {

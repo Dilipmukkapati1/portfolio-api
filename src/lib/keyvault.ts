@@ -1,10 +1,15 @@
+import fs from "node:fs";
+import path from "node:path";
 import { DefaultAzureCredential } from "@azure/identity";
 import { SecretClient } from "@azure/keyvault-secrets";
 import { getConfig } from "./config.js";
+import { getEnvSecret } from "./envSecrets.js";
 
 const credential = new DefaultAzureCredential();
 const cache = new Map<string, { value: string; expiresAt: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const LOCAL_SECRETS_FILE = path.join(process.cwd(), ".local-secrets.json");
+const localMemory = new Map<string, string>();
 
 function getSecretClient(): SecretClient | null {
   const { keyVaultName } = getConfig();
@@ -13,21 +18,53 @@ function getSecretClient(): SecretClient | null {
   return new SecretClient(url, credential);
 }
 
+function readLocalSecretsFile(): Record<string, string> {
+  try {
+    const raw = fs.readFileSync(LOCAL_SECRETS_FILE, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== "object" || parsed === null) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string"
+      )
+    );
+  } catch {
+    return {};
+  }
+}
+
+function getLocalSecret(name: string): string | undefined {
+  const cached = localMemory.get(name);
+  if (cached) return cached;
+
+  const fromFile = readLocalSecretsFile()[name];
+  if (fromFile) {
+    localMemory.set(name, fromFile);
+  }
+  return fromFile;
+}
+
+function setLocalSecret(name: string, value: string): boolean {
+  localMemory.set(name, value);
+  const all = { ...readLocalSecretsFile(), [name]: value };
+  fs.writeFileSync(LOCAL_SECRETS_FILE, `${JSON.stringify(all, null, 2)}\n`);
+  return true;
+}
+
 export async function getSecret(name: string): Promise<string | undefined> {
   const cached = cache.get(name);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.value;
   }
 
-  // Local env fallback (same names as Key Vault)
-  const envMap: Record<string, string | undefined> = {
-    "simplefin-access-url": process.env.SIMPLEFIN_ACCESS_URL,
-    "snaptrade-client-id": process.env.SNAPTRADE_CLIENT_ID,
-    "snaptrade-consumer-key": process.env.SNAPTRADE_CONSUMER_KEY,
-    "snaptrade-webhook-secret": process.env.SNAPTRADE_WEBHOOK_SECRET,
-  };
-  if (envMap[name]) {
-    return envMap[name];
+  const fromEnv = getEnvSecret(name);
+  if (fromEnv) {
+    return fromEnv;
+  }
+
+  const local = getLocalSecret(name);
+  if (local) {
+    return local;
   }
 
   const client = getSecretClient();
@@ -55,8 +92,7 @@ export async function setSecret(
 ): Promise<boolean> {
   const client = getSecretClient();
   if (!client) {
-    // Local dev: cannot write to KV without vault
-    return false;
+    return setLocalSecret(name, value);
   }
   await client.setSecret(name, value);
   cache.set(name, { value, expiresAt: Date.now() + CACHE_TTL_MS });

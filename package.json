@@ -8,9 +8,11 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "storage:start": "azurite --silent --location .azurite",
+    "storage:start": "azurite --silent --location .azurite --skipApiVersionCheck",
     "storage:start:docker": "docker compose up -d azurite",
     "storage:stop:docker": "docker compose down",
+    "cosmos:start:docker": "docker compose up -d cosmos-emulator",
+    "dev:deps": "docker compose up -d azurite cosmos-emulator",
     "start": "func start",
     "prestart": "npm run build",
     "test": "vitest run",

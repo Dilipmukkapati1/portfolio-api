@@ -72,6 +72,7 @@ export interface PortfolioDataStore {
   holdings: {
     listByHousehold(householdId: string): Promise<Holding[]>;
     upsert(holding: Holding): Promise<Holding>;
+    delete(householdId: string, id: string): Promise<void>;
   };
 
   integrations: {

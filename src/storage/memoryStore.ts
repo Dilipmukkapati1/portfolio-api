@@ -294,6 +294,10 @@ export class MemoryPortfolioStore implements PortfolioDataStore {
       getPartition(this.holdingData, holding.householdId).set(holding.id, holding);
       return holding;
     },
+
+    delete: async (householdId: string, id: string) => {
+      getPartition(this.holdingData, householdId).delete(id);
+    },
   };
 
   integrations = {

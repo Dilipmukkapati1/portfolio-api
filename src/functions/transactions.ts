@@ -44,20 +44,17 @@ async function categorizeHandler(
     return errorResponse(parsed.error.message, 400);
   }
 
-  const container = await import("../cosmos/client.js");
-  const txnContainer = container.getContainer("transactions");
-  try {
-    const { resource } = await txnContainer
-      .item(parsed.data.txnId, auth.householdId)
-      .read();
-    if (!resource) return errorResponse("Transaction not found", 404);
-    resource.category = parsed.data.category;
-    resource.updatedAt = new Date().toISOString();
-    await txnContainer.item(parsed.data.txnId, auth.householdId).replace(resource);
-    return jsonResponse(resource);
-  } catch {
-    return errorResponse("Transaction not found", 404);
-  }
+  const existing = await transactionRepository.get(
+    auth.householdId,
+    parsed.data.txnId
+  );
+  if (!existing) return errorResponse("Transaction not found", 404);
+  const updated = await transactionRepository.replace({
+    ...existing,
+    category: parsed.data.category,
+    updatedAt: new Date().toISOString(),
+  });
+  return jsonResponse(updated);
 }
 
 app.http("transactions", {

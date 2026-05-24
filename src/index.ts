@@ -10,6 +10,7 @@ import "./functions/holdings.js";
 import "./functions/networth.js";
 import "./functions/tax.js";
 import "./functions/connectSimplefin.js";
+import "./functions/integrationsStatus.js";
 import "./functions/simplefinSync.js";
 import "./functions/connectSnaptrade.js";
 import "./functions/snaptradeWebhook.js";

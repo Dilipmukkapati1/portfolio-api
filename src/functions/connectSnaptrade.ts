@@ -3,6 +3,7 @@ import { ConnectSnaptradeRequestSchema } from "@portfolio/contracts";
 import { integrationRepository } from "../cosmos/repositories/integrationRepository.js";
 import { snapTradeClient } from "../integrations/snaptrade/client.js";
 import { getAuthContext } from "../lib/auth.js";
+import { getConfig } from "../lib/config.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
 import { setSecret } from "../lib/keyvault.js";
 
@@ -22,9 +23,11 @@ async function connectSnaptradeHandler(
   const secretName = `snaptrade-user-secret-${auth.householdId}`;
   await setSecret(secretName, userSecret);
 
+  const config = getConfig();
   const redirectUrl =
     parsed.data.redirectUrl ??
-    `${request.url.split("/api")[0]}/api/integrations/snaptrade/callback`;
+    config.integrations.snaptrade.redirectUrl ??
+    `${config.apiPublicBaseUrl}/api/integrations/snaptrade/callback`;
 
   const loginLink = await snapTradeClient.getLoginLink(
     userId,

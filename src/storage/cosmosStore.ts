@@ -391,6 +391,10 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
       const { resource } = await getContainer("holdings").items.upsert(holding);
       return resource as unknown as Holding;
     },
+
+    delete: async (householdId: string, id: string): Promise<void> => {
+      await getContainer("holdings").item(id, householdId).delete();
+    },
   };
 
   integrations = {

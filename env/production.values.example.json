@@ -1,0 +1,16 @@
+{
+  "APP_ENV": "production",
+  "STORAGE_MODE": "cosmos",
+  "API_PUBLIC_BASE_URL": "https://YOUR-PROD-FUNCTION.azurewebsites.net",
+  "WEB_APP_URL": "https://YOUR-PROD-WEB.azurestaticapps.net",
+  "DEFAULT_HOUSEHOLD_ID": "prod-household",
+  "KEY_VAULT_NAME": "YOUR-PROD-KEYVAULT",
+  "COSMOS_ENDPOINT": "https://YOUR-PROD-COSMOS.documents.azure.com:443/",
+  "COSMOS_DATABASE": "portfolio",
+  "SIMPLEFIN_ACCESS_URL": "",
+  "SIMPLEFIN_ACCESS_URL__PROD_HOUSEHOLD": "",
+  "SNAPTRADE_CLIENT_ID": "",
+  "SNAPTRADE_CONSUMER_KEY": "",
+  "SNAPTRADE_WEBHOOK_SECRET": "",
+  "SNAPTRADE_REDIRECT_URL": "https://YOUR-PROD-FUNCTION.azurewebsites.net/api/integrations/snaptrade/callback"
+}

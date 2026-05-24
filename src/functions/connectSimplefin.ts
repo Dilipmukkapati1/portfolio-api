@@ -5,7 +5,7 @@ import { claimSetupToken } from "../integrations/simplefin/client.js";
 import { getAuthContext } from "../lib/auth.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
 import { setSecret, secretNameForSimplefin } from "../lib/keyvault.js";
-import { enqueueMessage } from "../lib/queue.js";
+import { tryEnqueueMessage } from "../lib/queue.js";
 
 async function connectSimplefinHandler(
   request: HttpRequest,
@@ -23,27 +23,39 @@ async function connectSimplefinHandler(
     const secretName = secretNameForSimplefin(auth.householdId);
     const stored = await setSecret(secretName, accessUrl);
 
-    const now = new Date().toISOString();
-    await integrationRepository.upsertToken({
-      id: "simplefin",
-      householdId: auth.householdId,
-      provider: "simplefin",
-      keyVaultSecretName: secretName,
-      createdAt: now,
-      updatedAt: now,
-    });
+    if (!stored) {
+      return errorResponse(
+        "SimpleFIN token was claimed but the access URL could not be saved. Configure Key Vault or use local dev storage.",
+        500
+      );
+    }
 
-    await enqueueMessage({
+    const now = new Date().toISOString();
+    try {
+      await integrationRepository.upsertToken({
+        id: "simplefin",
+        householdId: auth.householdId,
+        provider: "simplefin",
+        keyVaultSecretName: secretName,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (err) {
+      console.warn("SimpleFIN integration metadata save failed:", err);
+    }
+
+    const syncQueued = await tryEnqueueMessage({
       type: "sync.simplefin",
       householdId: auth.householdId,
     });
 
     return jsonResponse({
       connected: true,
-      secretStored: stored,
-      message: stored
+      secretStored: true,
+      syncQueued,
+      message: syncQueued
         ? "SimpleFIN connected. Initial sync queued."
-        : "SimpleFIN claimed. Set SIMPLEFIN_ACCESS_URL locally or Key Vault for sync.",
+        : "SimpleFIN connected. Click Sync now to fetch accounts (queue unavailable).",
     });
   } catch (err) {
     return errorResponse(

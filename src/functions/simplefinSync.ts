@@ -33,7 +33,14 @@ async function simplefinSyncHttpHandler(
   if (syncNow) {
     try {
       const result = await syncSimplefinForHousehold(auth.householdId);
-      return jsonResponse({ ...result, syncedAt: new Date().toISOString() });
+      return jsonResponse({
+        ...result,
+        accountsSynced: result.accounts,
+        message: result.warnings?.length
+          ? `Synced ${result.accounts} account(s). ${result.warnings.join("; ")}`
+          : `Synced ${result.accounts} account(s).`,
+        syncedAt: new Date().toISOString(),
+      });
     } catch (err) {
       return errorResponse(
         err instanceof Error ? err.message : "Sync failed",

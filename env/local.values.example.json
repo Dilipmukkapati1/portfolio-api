@@ -1,0 +1,14 @@
+{
+  "APP_ENV": "local",
+  "STORAGE_MODE": "memory",
+  "API_PUBLIC_BASE_URL": "http://localhost:7071",
+  "WEB_APP_URL": "http://localhost:3000",
+  "DEFAULT_HOUSEHOLD_ID": "local-household",
+  "KEY_VAULT_NAME": "",
+  "SIMPLEFIN_ACCESS_URL": "",
+  "SIMPLEFIN_ACCESS_URL__LOCAL_HOUSEHOLD": "",
+  "SNAPTRADE_CLIENT_ID": "",
+  "SNAPTRADE_CONSUMER_KEY": "",
+  "SNAPTRADE_WEBHOOK_SECRET": "",
+  "SNAPTRADE_REDIRECT_URL": "http://localhost:7071/api/integrations/snaptrade/callback"
+}

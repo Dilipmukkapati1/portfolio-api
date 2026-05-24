@@ -1,71 +1,74 @@
-import type { Household, CreateHouseholdRequest, UpdateHouseholdRequest } from "@portfolio/contracts";
-import { getContainer } from "../client.js";
-
-const CONTAINER = "households";
+import type {
+  CreateHouseholdRequest,
+  Household,
+  UpdateHouseholdRequest,
+} from "@portfolio/contracts";
+import { getDataStore } from "../../storage/index.js";
 
 export class HouseholdRepository {
+  async list(): Promise<Household[]> {
+    const store = await getDataStore();
+    const households = await store.household.list();
+    return households.sort((a, b) =>
+      a.displayName.localeCompare(b.displayName)
+    );
+  }
+
   async get(householdId: string): Promise<Household | null> {
-    const container = getContainer(CONTAINER);
-    try {
-      const { resource } = await container
-        .item(householdId, householdId)
-        .read<Household>();
-      return resource ?? null;
-    } catch (err: unknown) {
-      if ((err as { code?: number }).code === 404) return null;
-      throw err;
-    }
+    const store = await getDataStore();
+    return store.household.get(householdId);
   }
 
   async create(
     householdId: string,
     data: CreateHouseholdRequest
   ): Promise<Household> {
-    const now = new Date().toISOString();
-    const doc: Household = {
-      id: householdId,
-      householdId,
-      displayName: data.displayName,
-      state: data.state,
-      filingStatus: data.filingStatus,
-      dependents: data.dependents ?? 0,
-      persona: data.persona,
-      createdAt: now,
-      updatedAt: now,
-    };
-    const container = getContainer(CONTAINER);
-    await container.items.create(doc);
-    return doc;
+    const store = await getDataStore();
+    return store.household.create(householdId, data);
   }
 
   async update(
     householdId: string,
     data: UpdateHouseholdRequest
   ): Promise<Household> {
-    const existing = await this.get(householdId);
-    if (!existing) {
-      throw new Error("Household not found");
+    const store = await getDataStore();
+    return store.household.update(householdId, data);
+  }
+
+  async delete(householdId: string): Promise<boolean> {
+    const store = await getDataStore();
+    return store.household.delete(householdId);
+  }
+
+  async deleteMany(householdIds: string[]): Promise<{
+    deleted: string[];
+    failed: Array<{ householdId: string; reason: string }>;
+  }> {
+    const deleted: string[] = [];
+    const failed: Array<{ householdId: string; reason: string }> = [];
+
+    for (const householdId of householdIds) {
+      try {
+        const ok = await this.delete(householdId);
+        if (ok) deleted.push(householdId);
+        else failed.push({ householdId, reason: "Household not found" });
+      } catch (err) {
+        failed.push({
+          householdId,
+          reason: err instanceof Error ? err.message : "Delete failed",
+        });
+      }
     }
-    const updated: Household = {
-      ...existing,
-      ...data,
-      updatedAt: new Date().toISOString(),
-    };
-    const container = getContainer(CONTAINER);
-    await container.item(householdId, householdId).replace(updated);
-    return updated;
+
+    return { deleted, failed };
   }
 
   async updateNetWorthSummary(
     householdId: string,
     summary: Household["netWorthSummary"]
   ): Promise<void> {
-    const existing = await this.get(householdId);
-    if (!existing) return;
-    existing.netWorthSummary = summary;
-    existing.updatedAt = new Date().toISOString();
-    const container = getContainer(CONTAINER);
-    await container.item(householdId, householdId).replace(existing);
+    const store = await getDataStore();
+    return store.household.updateNetWorthSummary(householdId, summary);
   }
 }
 
