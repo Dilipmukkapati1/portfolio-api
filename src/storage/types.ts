@@ -11,6 +11,7 @@ import type {
   TaxProfile,
   Transaction,
   TransactionFilter,
+  TransactionListResponse,
   UpdateHouseholdRequest,
   UpdateMemberRequest,
   UpsertTaxProfileRequest,
@@ -64,7 +65,10 @@ export interface PortfolioStoreCore {
   };
 
   transactions: {
-    list(householdId: string, filter?: TransactionFilter): Promise<Transaction[]>;
+    list(
+      householdId: string,
+      filter?: TransactionFilter
+    ): Promise<TransactionListResponse>;
     upsert(txn: Transaction): Promise<Transaction>;
     get(householdId: string, txnId: string): Promise<Transaction | null>;
     replace(txn: Transaction): Promise<Transaction>;

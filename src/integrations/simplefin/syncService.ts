@@ -317,10 +317,13 @@ async function syncAccountTransactions(
   sfAccount: SimpleFinAccount,
   now: string
 ): Promise<number> {
-  const existingTxns = await transactionRepository.list(householdId, {
-    accountId: account.accountId,
-    limit: 500,
-  });
+  const { transactions: existingTxns } = await transactionRepository.list(
+    householdId,
+    {
+      accountId: account.accountId,
+      limit: 500,
+    }
+  );
   const existingByTxnId = new Map(
     existingTxns.map((txn) => [txn.txnId, txn] as const)
   );

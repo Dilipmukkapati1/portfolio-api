@@ -1,11 +1,15 @@
-import type { Transaction, TransactionFilter } from "@portfolio/contracts";
+import type {
+  Transaction,
+  TransactionFilter,
+  TransactionListResponse,
+} from "@portfolio/contracts";
 import { getDataStore } from "../../storage/index.js";
 
 export class TransactionRepository {
   async list(
     householdId: string,
     filter: TransactionFilter = { limit: 100 }
-  ): Promise<Transaction[]> {
+  ): Promise<TransactionListResponse> {
     const store = await getDataStore();
     return store.transactions.list(householdId, filter);
   }

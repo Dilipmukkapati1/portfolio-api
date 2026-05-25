@@ -81,9 +81,10 @@ describe("storage", () => {
 
     resetDataStoreForTests();
     const withTxn = await getDataStore();
-    const txns = await withTxn.transactions.list("persist-h1", { limit: 10 });
-    expect(txns).toHaveLength(1);
-    expect(txns[0]?.description).toBe("Coffee");
+    const page = await withTxn.transactions.list("persist-h1", { limit: 10 });
+    expect(page.transactions).toHaveLength(1);
+    expect(page.transactions[0]?.description).toBe("Coffee");
+    expect(page.hasMore).toBe(false);
 
     fs.rmSync(dir, { recursive: true, force: true });
   });

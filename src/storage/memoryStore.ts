@@ -11,11 +11,16 @@ import type {
   TaxProfile,
   Transaction,
   TransactionFilter,
+  TransactionListResponse,
   UpdateHouseholdRequest,
   UpdateMemberRequest,
 } from "@portfolio/contracts";
 import { resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts";
 import { randomUUID } from "node:crypto";
+import {
+  decodeTransactionCursor,
+  encodeTransactionCursor,
+} from "../lib/transactionCursor.js";
 import type { PortfolioStoreCore } from "./types.js";
 
 export interface MemoryStoreSnapshot {
@@ -264,7 +269,18 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
   };
 
   transactions = {
-    list: async (householdId: string, filter: TransactionFilter = { limit: 100 }) => {
+    list: async (
+      householdId: string,
+      filter: TransactionFilter = { limit: 100 }
+    ): Promise<TransactionListResponse> => {
+      const limit = filter.limit ?? 100;
+      const cursor = filter.cursor
+        ? decodeTransactionCursor(filter.cursor)
+        : null;
+      if (filter.cursor && !cursor) {
+        throw new Error("Invalid cursor");
+      }
+
       let rows = [...getPartition(this.transactionData, householdId).values()];
       if (filter.accountId) {
         rows = rows.filter((t) => t.accountId === filter.accountId);
@@ -284,8 +300,31 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
       if (filter.endDate) {
         rows = rows.filter((t) => t.date <= filter.endDate!);
       }
-      rows.sort((a, b) => b.date.localeCompare(a.date));
-      return rows.slice(0, filter.limit ?? 100);
+      if (cursor) {
+        rows = rows.filter(
+          (t) =>
+            t.date < cursor.date ||
+            (t.date === cursor.date && t.id < cursor.id)
+        );
+      }
+      rows.sort((a, b) => {
+        const byDate = b.date.localeCompare(a.date);
+        if (byDate !== 0) return byDate;
+        return b.id.localeCompare(a.id);
+      });
+
+      const hasMore = rows.length > limit;
+      const transactions = hasMore ? rows.slice(0, limit) : rows;
+      const last = transactions[transactions.length - 1];
+
+      return {
+        transactions,
+        hasMore,
+        nextCursor:
+          hasMore && last
+            ? encodeTransactionCursor({ date: last.date, id: last.id })
+            : undefined,
+      };
     },
 
     upsert: async (txn: Transaction) => {

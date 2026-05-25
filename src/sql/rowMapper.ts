@@ -26,7 +26,10 @@ export type TransactionRow = {
 
 function toIsoDate(value: Date | null | undefined): string | undefined {
   if (!value) return undefined;
-  return value.toISOString().slice(0, 10);
+  const year = value.getUTCFullYear();
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function toIsoDateTime(value: Date | null | undefined): string | undefined {

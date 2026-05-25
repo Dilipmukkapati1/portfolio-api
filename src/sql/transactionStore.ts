@@ -1,5 +1,10 @@
-import type { Transaction, TransactionFilter } from "@portfolio/contracts";
+import type {
+  Transaction,
+  TransactionFilter,
+  TransactionListResponse,
+} from "@portfolio/contracts";
 import sql from "mssql";
+import { decodeTransactionCursor, encodeTransactionCursor } from "../lib/transactionCursor.js";
 import { getSqlPool, withSqlRetry } from "./client.js";
 import { rowToTransaction, transactionToRow, type TransactionRow } from "./rowMapper.js";
 
@@ -7,12 +12,20 @@ export class SqlTransactionStore {
   async list(
     householdId: string,
     filter: TransactionFilter = { limit: 100 }
-  ): Promise<Transaction[]> {
+  ): Promise<TransactionListResponse> {
     return withSqlRetry(async () => {
       const pool = await getSqlPool();
       const request = pool.request();
+      const limit = filter.limit ?? 100;
+      const cursor = filter.cursor
+        ? decodeTransactionCursor(filter.cursor)
+        : null;
+      if (filter.cursor && !cursor) {
+        throw new Error("Invalid cursor");
+      }
+
       request.input("hid", sql.NVarChar(128), householdId);
-      request.input("limit", sql.Int, filter.limit ?? 100);
+      request.input("limit", sql.Int, limit + 1);
 
       let query = `
         SELECT TOP (@limit) *
@@ -43,11 +56,32 @@ export class SqlTransactionStore {
         request.input("end", sql.Date, filter.endDate);
         query += " AND txn_date <= @end";
       }
+      if (cursor) {
+        request.input("cursorDate", sql.Date, cursor.date);
+        request.input("cursorId", sql.NVarChar(256), cursor.id);
+        query += `
+          AND (
+            txn_date < @cursorDate
+            OR (txn_date = @cursorDate AND id < @cursorId)
+          )`;
+      }
 
       query += " ORDER BY txn_date DESC, id DESC";
 
       const result = await request.query<TransactionRow>(query);
-      return result.recordset.map(rowToTransaction);
+      const rows = result.recordset.map(rowToTransaction);
+      const hasMore = rows.length > limit;
+      const transactions = hasMore ? rows.slice(0, limit) : rows;
+      const last = transactions[transactions.length - 1];
+
+      return {
+        transactions,
+        hasMore,
+        nextCursor:
+          hasMore && last
+            ? encodeTransactionCursor({ date: last.date, id: last.id })
+            : undefined,
+      };
     });
   }
 

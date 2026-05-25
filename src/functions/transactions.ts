@@ -14,7 +14,10 @@ function mapStorageError(err: unknown): HttpResponseInit | null {
   if (err instanceof SqlUnavailableError) {
     return errorResponse(err.message, 503);
   }
-  if (err instanceof Error && err.message.includes("startDate")) {
+  if (
+    err instanceof Error &&
+    (err.message.includes("startDate") || err.message.includes("cursor"))
+  ) {
     return errorResponse(err.message, 400);
   }
   return null;
@@ -41,12 +44,13 @@ async function transactionsHandler(
         limit: url.searchParams.get("limit")
           ? parseInt(url.searchParams.get("limit")!, 10)
           : 100,
+        cursor: url.searchParams.get("cursor") ?? undefined,
       });
-      const transactions = await transactionRepository.list(
+      const result = await transactionRepository.list(
         auth.householdId,
         filter
       );
-      return jsonResponse({ transactions });
+      return jsonResponse(result);
     } catch (err) {
       const mapped = mapStorageError(err);
       if (mapped) return mapped;

@@ -202,6 +202,13 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
               in: "query",
               schema: { type: "integer", default: 100, maximum: 500 },
             },
+            {
+              name: "cursor",
+              in: "query",
+              description:
+                "Opaque cursor from a previous page's nextCursor (ordered by date desc, id desc)",
+              schema: { type: "string" },
+            },
           ],
           responses: {
             "200": {
@@ -215,7 +222,10 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
                         type: "array",
                         items: { $ref: "#/components/schemas/Transaction" },
                       },
+                      hasMore: { type: "boolean" },
+                      nextCursor: { type: "string" },
                     },
+                    required: ["transactions", "hasMore"],
                   },
                 },
               },

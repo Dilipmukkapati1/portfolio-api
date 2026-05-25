@@ -31,7 +31,9 @@ export async function categorizeHouseholdTransactions(
   const { transactionRepository } = await import(
     "../../cosmos/repositories/transactionRepository.js"
   );
-  const txns = await transactionRepository.list(householdId, { limit: 500 });
+  const { transactions: txns } = await transactionRepository.list(householdId, {
+    limit: 500,
+  });
   let updated = 0;
   for (const txn of txns) {
     if (txn.categorySource === "user") continue;
