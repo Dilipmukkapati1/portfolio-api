@@ -1,3 +1,4 @@
+import type { Member } from "@portfolio/contracts";
 import type {
   SimpleFinAccount,
   SimpleFinConnection,
@@ -40,6 +41,38 @@ export function buildConnectionIndex(
     if (conn.conn_id) map.set(conn.conn_id, conn);
   }
   return map;
+}
+
+/** Map a SimpleFIN connection label to a household member when possible. */
+export function resolveOwnerMemberId(
+  connectionLabel: string | undefined,
+  members: Member[]
+): string | undefined {
+  const label = connectionLabel?.trim();
+  if (!label) return undefined;
+
+  const lower = label.toLowerCase();
+  const active = members.filter((member) => member.isActive);
+  if (active.length === 0) return undefined;
+
+  for (const member of active) {
+    const name = member.name.trim();
+    const nameLower = name.toLowerCase();
+    if (
+      lower === nameLower ||
+      lower.includes(nameLower) ||
+      nameLower.includes(lower)
+    ) {
+      return member.id;
+    }
+    const first = name.split(/\s+/)[0]?.toLowerCase();
+    if (first && first.length >= 2 && lower.includes(first)) {
+      return member.id;
+    }
+  }
+
+  if (active.length === 1) return active[0]!.id;
+  return active.find((member) => member.relationship === "self")?.id;
 }
 
 export function resolveInstitutionName(

@@ -175,7 +175,19 @@ async function buildStore(): Promise<PortfolioDataStore> {
   );
 }
 
-export async function getDataStore(): Promise<PortfolioDataStore> {
+async function ensureDataStore(): Promise<PortfolioDataStore> {
+  if (
+    store &&
+    store.sources.transactions === "unavailable" &&
+    isSqlConfigured() &&
+    (await probeSql())
+  ) {
+    console.log(
+      "[portfolio-api] Azure SQL is available now; rebuilding storage (was unavailable at cold start)."
+    );
+    resetStorageConnection();
+  }
+
   if (store) return store;
   if (!initPromise) {
     initPromise = buildStore().then((built) => {
@@ -184,6 +196,10 @@ export async function getDataStore(): Promise<PortfolioDataStore> {
     });
   }
   return initPromise;
+}
+
+export async function getDataStore(): Promise<PortfolioDataStore> {
+  return ensureDataStore();
 }
 
 /** Clear cached clients so the next request can reconnect or use disk fallback. */

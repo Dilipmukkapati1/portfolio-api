@@ -51,6 +51,24 @@ function setLocalSecret(name: string, value: string): boolean {
   return true;
 }
 
+function envSecretPrefix(): string {
+  const { appEnv } = getConfig();
+  if (appEnv === "production") return "prod-";
+  if (appEnv === "development") return "dev-";
+  return "";
+}
+
+/** Map logical secret names to Key Vault names (dev-/prod- prefix in Azure). */
+function keyVaultSecretNames(logicalName: string): string[] {
+  const prefix = envSecretPrefix();
+  if (!prefix || logicalName.startsWith(prefix)) return [logicalName];
+  return [`${prefix}${logicalName}`, logicalName];
+}
+
+function cacheSecret(name: string, value: string): void {
+  cache.set(name, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+}
+
 export async function getSecret(name: string): Promise<string | undefined> {
   const cached = cache.get(name);
   if (cached && cached.expiresAt > Date.now()) {
@@ -70,16 +88,19 @@ export async function getSecret(name: string): Promise<string | undefined> {
   const client = getSecretClient();
   if (!client) return undefined;
 
-  try {
-    const secret = await client.getSecret(name);
-    const value = secret.value;
-    if (value) {
-      cache.set(name, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+  for (const kvName of keyVaultSecretNames(name)) {
+    try {
+      const secret = await client.getSecret(kvName);
+      const value = secret.value;
+      if (value) {
+        cacheSecret(name, value);
+        return value;
+      }
+    } catch {
+      // try next candidate name
     }
-    return value;
-  } catch {
-    return undefined;
   }
+  return undefined;
 }
 
 export function secretNameForSimplefin(householdId: string): string {
@@ -94,7 +115,8 @@ export async function setSecret(
   if (!client) {
     return setLocalSecret(name, value);
   }
-  await client.setSecret(name, value);
-  cache.set(name, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+  const [kvName] = keyVaultSecretNames(name);
+  await client.setSecret(kvName, value);
+  cacheSecret(name, value);
   return true;
 }

@@ -6,6 +6,7 @@ import {
   inferAccountType,
   isInitialSimplefinSync,
   resolveInstitutionName,
+  resolveOwnerMemberId,
   resolveSimplefinSyncWindow,
   resolveSyncedAccountType,
   simpleFinAccountDocumentId,
@@ -26,6 +27,41 @@ describe("simpleFinAccountDocumentId", () => {
     expect(simpleFinAccountDocumentId("CON-SIMPLEFIN-DEMO", "Demo Savings")).toBe(
       "sf-CON_SIMPLEFIN_DEMO-Demo_Savings"
     );
+  });
+});
+
+describe("resolveOwnerMemberId", () => {
+  const members = [
+    {
+      id: "m1",
+      householdId: "h1",
+      name: "Dilip Mukkapati",
+      relationship: "self" as const,
+      isActive: true,
+      incomeSources: [],
+      contributions: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      id: "m2",
+      householdId: "h1",
+      name: "Spouse Name",
+      relationship: "spouse" as const,
+      isActive: true,
+      incomeSources: [],
+      contributions: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  ];
+
+  it("matches a connection label containing the member name", () => {
+    expect(resolveOwnerMemberId("Dilip - Chase", members)).toBe("m1");
+  });
+
+  it("falls back to the sole active member", () => {
+    expect(resolveOwnerMemberId("Household", [members[0]!])).toBe("m1");
   });
 });
 

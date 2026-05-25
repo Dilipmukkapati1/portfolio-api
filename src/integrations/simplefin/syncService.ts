@@ -32,10 +32,12 @@ import {
   inferAccountType,
   resolveSimplefinSyncWindow,
   resolveInstitutionName,
+  resolveOwnerMemberId,
   resolveSyncedAccountType,
   simpleFinAccountDocumentId,
   simpleFinExternalId,
 } from "./accountMapping.js";
+import { memberRepository } from "../../cosmos/repositories/memberRepository.js";
 
 export type SimpleFinSyncResult = {
   accounts: number;
@@ -194,6 +196,7 @@ async function processSimplefinResponse(
 ): Promise<{ transactions: number; holdings: number }> {
   let txnCount = 0;
   let holdingCount = 0;
+  const members = await memberRepository.listByHousehold(options.householdId);
 
   for (const sfAccount of data.accounts ?? []) {
     const connId = sfAccount.conn_id ?? "default";
@@ -221,6 +224,12 @@ async function processSimplefinResponse(
 
     const balance = parseFloat(sfAccount.balance) || 0;
     const sfHoldings = extractSimpleFinHoldings(sfAccount);
+    const conn = sfAccount.conn_id
+      ? options.connections.get(sfAccount.conn_id)
+      : undefined;
+    const ownerMemberId =
+      resolveOwnerMemberId(conn?.name ?? sfAccount.conn_name, members) ??
+      existing?.ownerMemberId;
     const account: Account = {
       id: accountId,
       householdId: options.householdId,
@@ -234,6 +243,8 @@ async function processSimplefinResponse(
         balance,
         sfHoldings
       ),
+      ownerMemberId,
+      connectionLabel: conn?.name ?? sfAccount.conn_name,
       balance,
       currency: sfAccount.currency ?? "USD",
       isActive: true,

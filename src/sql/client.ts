@@ -22,6 +22,8 @@ function readEnv(name: string): string | undefined {
 export function isSqlConfigured(): boolean {
   if (readEnv("AZURE_SQL_CONNECTION_STRING")) return true;
   if (getEnvSecret("azure-sql-connection-string")) return true;
+  const { keyVaultName } = getConfig();
+  if (keyVaultName && readEnv("AZURE_SQL_DATABASE")) return true;
   const server = readEnv("AZURE_SQL_SERVER");
   const database = readEnv("AZURE_SQL_DATABASE");
   const user = readEnv("AZURE_SQL_USER");
@@ -75,21 +77,32 @@ export async function getSqlPool(): Promise<sql.ConnectionPool> {
   return poolPromise;
 }
 
-export async function probeSql(): Promise<boolean> {
+export async function probeSql(attempts = 3): Promise<boolean> {
   if (!isSqlConfigured()) return false;
-  try {
-    const p = await getSqlPool();
-    await p.request().query("SELECT 1 AS ok");
-    return true;
-  } catch (err) {
-    console.warn(
-      "[portfolio-api] Azure SQL unavailable:",
-      err instanceof Error ? err.message : err
-    );
-    pool = null;
-    poolPromise = null;
-    return false;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const p = await getSqlPool();
+      await p.request().query("SELECT 1 AS ok");
+      return true;
+    } catch (err) {
+      pool = null;
+      poolPromise = null;
+      const message = err instanceof Error ? err.message : String(err);
+      const retryable = /40613|40615|40197|40501|timeout|paused|not currently available/i.test(
+        message
+      );
+      if (i < attempts - 1 && retryable) {
+        console.warn(
+          `[portfolio-api] Azure SQL probe attempt ${i + 1} failed (${message}); retrying…`
+        );
+        await new Promise((r) => setTimeout(r, 5000 * (i + 1)));
+        continue;
+      }
+      console.warn("[portfolio-api] Azure SQL unavailable:", message);
+      return false;
+    }
   }
+  return false;
 }
 
 function isTransientError(err: unknown): boolean {
