@@ -4,7 +4,7 @@ import type { SqlTransactionStore } from "../sql/transactionStore.js";
 export class SqlUnavailableError extends Error {
   constructor() {
     super(
-      "Azure SQL is not configured or unavailable. Start local SQL (npm run dev:deps && npm run db:migrate) or set AZURE_SQL_* env vars."
+      "Azure SQL is not configured or unavailable. Configure Azure SQL (npm run sql:azure && npm run db:migrate) or set AZURE_SQL_* env vars."
     );
     this.name = "SqlUnavailableError";
   }

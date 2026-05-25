@@ -165,7 +165,7 @@ async function buildStore(): Promise<PortfolioDataStore> {
 
   if (isCosmosStorageMode()) {
     console.warn(
-      "[portfolio-api] Azure SQL unavailable; transactions will fail until SQL is running (npm run dev:deps && npm run db:migrate)."
+      "[portfolio-api] Azure SQL unavailable; transactions will fail until SQL is running (npm run azure:local && npm run db:migrate)."
     );
   }
 

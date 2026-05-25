@@ -34,13 +34,18 @@ function usingEmulator(): boolean {
   return Boolean(cosmosEndpoint && isEmulatorEndpoint(cosmosEndpoint));
 }
 
+function usingAzure(): boolean {
+  const { cosmosEndpoint } = getConfig();
+  return Boolean(cosmosEndpoint && !isEmulatorEndpoint(cosmosEndpoint));
+}
+
 function containerPauseMs(): number {
-  return usingEmulator() ? 1_000 : 200;
+  return usingEmulator() ? 1_000 : 0;
 }
 
 function maxCreateAttempts(kind: "database" | "container"): number {
   if (!usingEmulator()) {
-    return kind === "database" ? 8 : 6;
+    return kind === "database" ? 4 : 4;
   }
   return kind === "database" ? 10 : 12;
 }
@@ -83,7 +88,9 @@ export function resetCosmosBootstrap(): void {
 
 export function isCosmosConfigured(): boolean {
   const { cosmosEndpoint, cosmosKey } = getConfig();
-  return Boolean(cosmosEndpoint && cosmosKey);
+  if (!cosmosEndpoint) return false;
+  if (cosmosKey) return true;
+  return usingAzure();
 }
 
 async function createDatabaseIfNeeded(): Promise<void> {
@@ -107,6 +114,21 @@ async function createDatabaseIfNeeded(): Promise<void> {
   }
 }
 
+async function verifyDatabaseExists(): Promise<void> {
+  const { cosmosDatabase } = getConfig();
+  try {
+    await getCosmosClient().database(cosmosDatabase).read();
+  } catch (err) {
+    if (isNotFoundError(err)) {
+      throw new Error(
+        `Cosmos database "${cosmosDatabase}" not found in Azure. ` +
+          `Use portfolio-dev (terraform) and run: cd portfolio-infra && make apply-dev`
+      );
+    }
+    throw err instanceof Error ? err : new Error("Cosmos DB database lookup failed");
+  }
+}
+
 async function containerExists(name: CosmosContainerName): Promise<boolean> {
   const { cosmosDatabase } = getConfig();
   try {
@@ -117,6 +139,14 @@ async function containerExists(name: CosmosContainerName): Promise<boolean> {
     if (isCosmosThrottleError(err)) throw err;
     throw err instanceof Error ? err : new Error(`Cosmos container "${name}" lookup failed`);
   }
+}
+
+async function verifyContainerExists(name: CosmosContainerName): Promise<void> {
+  if (await containerExists(name)) return;
+  throw new Error(
+    `Cosmos container "${name}" not found in Azure database. ` +
+      `Containers are provisioned by Terraform: cd portfolio-infra && make apply-dev`
+  );
 }
 
 async function createContainerIfNeeded(name: CosmosContainerName): Promise<void> {
@@ -134,7 +164,6 @@ async function createContainerIfNeeded(name: CosmosContainerName): Promise<void>
       });
       return;
     } catch (err) {
-      if (isNotFoundError(err)) return;
       if (await containerExists(name)) return;
       if (!isCosmosThrottleError(err) || attempt === maxAttempts) {
         throw err instanceof Error ? err : new Error("Cosmos DB bootstrap failed");
@@ -147,15 +176,19 @@ async function createContainerIfNeeded(name: CosmosContainerName): Promise<void>
   }
 }
 
-/** Ensures the Cosmos database exists (fast probe for storage init). */
+/** Ensures the Cosmos database exists (or is reachable in Azure). */
 export async function ensureCosmosDatabase(): Promise<void> {
   if (databaseReady) return;
   if (!databasePromise) {
-    databasePromise = enqueue(async () => {
+    databasePromise = (async () => {
       if (databaseReady) return;
-      await createDatabaseIfNeeded();
+      if (usingAzure()) {
+        await verifyDatabaseExists();
+      } else {
+        await enqueue(() => createDatabaseIfNeeded());
+      }
       databaseReady = true;
-    }).catch((err) => {
+    })().catch((err) => {
       databasePromise = null;
       throw err;
     });
@@ -163,18 +196,26 @@ export async function ensureCosmosDatabase(): Promise<void> {
   await databasePromise;
 }
 
-/** Ensures a single container exists before reads/writes. Serialized globally. */
+/** Ensures a container is ready before reads/writes. */
 export async function ensureCosmosContainer(name: CosmosContainerName): Promise<void> {
   if (readyContainers.has(name)) return;
 
   let pending = containerPromises.get(name);
   if (!pending) {
-    pending = enqueue(async () => {
-      if (readyContainers.has(name)) return;
-      await ensureCosmosDatabase();
-      await createContainerIfNeeded(name);
-      readyContainers.add(name);
-    });
+    if (usingAzure()) {
+      pending = (async () => {
+        await ensureCosmosDatabase();
+        await verifyContainerExists(name);
+        readyContainers.add(name);
+      })();
+    } else {
+      pending = enqueue(async () => {
+        if (readyContainers.has(name)) return;
+        await ensureCosmosDatabase();
+        await createContainerIfNeeded(name);
+        readyContainers.add(name);
+      });
+    }
     containerPromises.set(name, pending);
   }
 
@@ -199,19 +240,23 @@ export async function getContainerReady(
   return getCosmosClient().database(cosmosDatabase).container(name);
 }
 
-/** Pre-create containers sequentially before serving traffic. */
+/** Verify containers exist before serving traffic. */
 export function warmCosmosContainers(): Promise<void> {
   if (!isCosmosConfigured()) return Promise.resolve();
   if (warmupPromise) return warmupPromise;
 
   warmupPromise = (async () => {
+    const target = usingAzure() ? "Azure (Terraform-provisioned)" : "emulator (serialized create)";
     console.log(
-      `[portfolio-api] Cosmos container warmup starting (${CONTAINERS.length} containers, serialized${
-        usingEmulator() ? ", emulator pacing enabled" : ""
-      })...`
+      `[portfolio-api] Cosmos container warmup starting (${CONTAINERS.length} containers, ${target})...`
     );
-    for (const containerName of CONTAINERS) {
-      await ensureCosmosContainer(containerName);
+    await ensureCosmosDatabase();
+    if (usingAzure()) {
+      await Promise.all(CONTAINERS.map((name) => ensureCosmosContainer(name)));
+    } else {
+      for (const containerName of CONTAINERS) {
+        await ensureCosmosContainer(containerName);
+      }
     }
     console.log("[portfolio-api] Cosmos container warmup finished");
   })().catch((err) => {

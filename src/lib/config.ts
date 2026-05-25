@@ -50,7 +50,9 @@ export function getConfig() {
     appEnv,
     cosmosEndpoint: readEnv("COSMOS_ENDPOINT") ?? "",
     cosmosKey: readEnv("COSMOS_KEY"),
-    cosmosDatabase: readEnv("COSMOS_DATABASE") ?? "portfolio",
+    cosmosDatabase:
+      readEnv("COSMOS_DATABASE") ??
+      "portfolio-dev",
     keyVaultName: readEnv("KEY_VAULT_NAME"),
     queueName: readEnv("PORTFOLIO_QUEUE_NAME") ?? "portfolio-sync",
     defaultHouseholdId: readEnv("DEFAULT_HOUSEHOLD_ID") ?? "local-household",

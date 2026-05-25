@@ -36,7 +36,7 @@ async function resolveConnectionString(): Promise<string> {
   if (direct) return direct;
 
   const server = readEnv("AZURE_SQL_SERVER");
-  const database = readEnv("AZURE_SQL_DATABASE") ?? "portfolio";
+  const database = readEnv("AZURE_SQL_DATABASE") ?? "sqldb-dev";
   const user = readEnv("AZURE_SQL_USER");
   const password = readEnv("AZURE_SQL_PASSWORD");
   if (!server || !user || !password) {

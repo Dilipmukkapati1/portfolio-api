@@ -1,72 +1,90 @@
 # portfolio-api
 
-Azure Functions v4 (TypeScript) — Cosmos DB, Key Vault, SimpleFIN, SnapTrade.
+Azure Functions v4 (TypeScript) — Cosmos DB, Azure SQL, Key Vault, SimpleFIN, SnapTrade.
 
 ## Prerequisites
 
 - Node 20+
 - [Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local) v4
-- [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) (queues/storage)
-- Cosmos DB Emulator + SQL Server (local Docker) — required for default `STORAGE_MODE=cosmos`
-- Or use `STORAGE_MODE=disk` for fully local JSON storage (no Cosmos/SQL)
+- [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) via npm (`storage:start`) for queues/blob emulation
+- [Terraform](https://www.terraform.io/downloads) + [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) — `portfolio-infra` dev stack applied
+- `jq`, **Liquibase 4.31.x** (`brew install liquibase`)
+- `sql_allow_current_client_ip = true` in `portfolio-infra/terraform/terraform.tfvars` (re-apply when your public IP changes)
 
-## Local run
+Or use `STORAGE_MODE=disk` for fully local JSON storage (no Cosmos/SQL).
 
-**Terminal 1 — Azurite** (required for timers, queue worker, and `AzureWebJobsStorage`):
+## Local run (zero Docker)
+
+Local dev uses **Azure Cosmos** (`portfolio-dev`) and **Azure SQL** (`sqldb-dev`) from Terraform. Azurite runs via npm only.
+
+**Shared dev SQL:** All developers use the same `sqldb-dev` database. Coordinate Liquibase migrations before merging schema changes.
+
+### One-time setup
 
 ```bash
-cd portfolio-api
-npm run storage:start   # npm azurite on ports 10000–10002 (keep this terminal open)
-# Or with Docker: npm run storage:start:docker
-```
+cd ../portfolio-infra
+make apply-dev
+make seed-dev-sql          # optional: Key Vault connection string
 
-**Terminal 2 — API:**
-
-```bash
 cd ../portfolio-contracts && npm install && npm run build
 cd ../portfolio-tax-engine && npm install && npm run build
 cd ../portfolio-api
 cp local.settings.json.example local.settings.json
 npm install && npm run build
+npm run azure:local        # Cosmos + SQL → local.settings.json
+npm run secrets:azure-local   # optional: SimpleFIN / SnapTrade from Key Vault
+npm run db:migrate         # first time on empty sqldb-dev
+```
+
+### Each session
+
+**Terminal 1 — Azurite** (required for timers, queues, `AzureWebJobsStorage`):
+
+```bash
+cd portfolio-api
+npm run storage:start    # ports 10000–10002; keep running
+```
+
+**Terminal 2 — API:**
+
+```bash
+npm run dev:check        # optional preflight
 npm start
 ```
 
-By default, local settings use **`STORAGE_MODE=cosmos`** with a split storage model:
+Verify: `GET http://localhost:7071/api/health` — `sources.transactions` should include `azure-sql` when SQL is reachable.
+
+### Storage layout (`STORAGE_MODE=cosmos`, default)
 
 | Store | Data |
 | ----- | ---- |
-| **Cosmos DB** | Households, bank/brokerage **accounts**, **holdings** / investments, tax profiles, integration tokens, sync state |
-| **Azure SQL** | **Transactions** (SimpleFIN / manual imports) |
+| **Cosmos DB** | Households, accounts, holdings, tax profiles, integration tokens, sync state |
+| **Azure SQL** | Transactions (SimpleFIN / imports) |
 
-Start dependencies, then the API:
+| npm script | Purpose |
+| ---------- | ------- |
+| `azure:local` | `cosmos:azure` + `sql:azure` |
+| `cosmos:azure` | Cosmos settings from Terraform + `az` |
+| `sql:azure` | SQL settings from Terraform (no `az` required) |
+| `sql:verify` | Test SQL connectivity (retries auto-pause) |
+| `db:migrate` / `db:status` | Liquibase against `sqldb-dev` |
 
-```bash
-npm run dev:deps      # Azurite + Cosmos emulator + SQL Server; waits for Cosmos/SQL readiness
-npm run db:migrate    # Liquibase schema for transactions table
-npm start
-```
+If Cosmos is unreachable at startup, the API **falls back to disk** for entities while SQL still handles transactions.
 
-The Cosmos emulator is heavy (~3 GB RAM) and needs **ports 8081 and 10250–10255** exposed. If it crashes on requests, run a clean reset:
+`STORAGE_MODE=memory` — ephemeral storage for tests.
 
-```bash
-npm run cosmos:reset    # pull latest image, clear .cosmos, restart
-```
+**SimpleFIN locally:** When `KEY_VAULT_NAME` is empty, claimed Access URLs are saved to `.local-secrets.json` (gitignored).
 
-Increase **Docker Desktop → Settings → Resources → Memory** to at least **10 GB** if the emulator keeps exiting. With only ~8 GB allocated to Docker, Cosmos + SQL compete for RAM.
+**Environment config:** See [env/README.md](./env/README.md) and `env/*.values.example.json`.
 
-If Cosmos is down when the API starts, it **automatically falls back to disk** (`.local-data/portfolio-store.json`) for accounts/holdings while SQL still handles transactions.
+### Troubleshooting
 
-For offline dev without Cosmos/SQL, set `STORAGE_MODE=disk` — everything persists to `.local-data/portfolio-store.json`.
-
-Use `STORAGE_MODE=memory` for ephemeral in-process storage in tests.
-
-**SimpleFIN locally:** When `KEY_VAULT_NAME` is empty, claimed Access URLs are saved to `.local-secrets.json` (gitignored) so setup tokens are not wasted on retry. Each setup token from [SimpleFIN Bridge](https://bridge.simplefin.org/simplefin/create) can only be claimed once — generate a new token if connect fails.
-
-**Environment config:** See [env/README.md](./env/README.md) and `env/*.values.example.json` for `local`, `development`, and `production` settings. Integration secrets (e.g. `SIMPLEFIN_ACCESS_URL`, `SNAPTRADE_*`) and URLs (`API_PUBLIC_BASE_URL`, `WEB_APP_URL`) are set per environment in `local.settings.json` or Azure App Settings.
-
-If you see `Connection refused (127.0.0.1:10000)` or `10001`, Azurite is not running — start it first, then restart `npm start`.
-
-If you see **Azurite API version 2026-02-06 is not supported**, restart Azurite with `npm run storage:start` (uses `--skipApiVersionCheck`). Docker: `npm run storage:stop:docker && npm run storage:start:docker`.
+| Issue | Fix |
+| ----- | --- |
+| `Connection refused 127.0.0.1:10000` | Run `npm run storage:start` |
+| SQL timeout on first query | DB auto-paused; wait and `npm run sql:verify` |
+| SQL login / firewall errors | `npm run sql:azure`; re-apply infra with `sql_allow_current_client_ip = true` |
+| Azurite API version unsupported | Restart `npm run storage:start` (`--skipApiVersionCheck`) |
 
 Health: `GET http://localhost:7071/api/health`
 
@@ -76,10 +94,10 @@ With the API running:
 
 | URL | Description |
 | --- | ----------- |
-| [http://localhost:7071/api/docs](http://localhost:7071/api/docs) | **Swagger UI** — browse and **Try it out** against live endpoints |
-| [http://localhost:7071/api/openapi.json](http://localhost:7071/api/openapi.json) | OpenAPI 3.0 JSON spec |
+| [http://localhost:7071/api/docs](http://localhost:7071/api/docs) | **Swagger UI** |
+| [http://localhost:7071/api/openapi.json](http://localhost:7071/api/openapi.json) | OpenAPI 3.0 JSON |
 
-Use **Authorize** in Swagger UI to set `x-household-id` (defaults to `local-household` if omitted). The spec’s server URL is derived from the request host so Try-it-out works locally and when deployed.
+Use **Authorize** in Swagger UI to set `x-household-id` (defaults to `local-household` if omitted).
 
 ## Key routes
 

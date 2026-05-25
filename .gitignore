@@ -11,3 +11,6 @@ coverage/
 .azurite/
 .local-data/
 .cosmos/
+
+.mssql/
+db/liquibase.local.properties

@@ -56,7 +56,7 @@ async function main(): Promise<void> {
   const sqlOk = await probeSql();
   if (!sqlOk) {
     throw new Error(
-      "Azure SQL is not configured or unreachable. Set AZURE_SQL_* in local.settings.json and run npm run dev:deps && npm run db:migrate."
+      "Azure SQL is not configured or unreachable. Set AZURE_SQL_* in local.settings.json and run npm run sql:azure && npm run db:migrate."
     );
   }
 
