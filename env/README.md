@@ -4,6 +4,22 @@ Copy the values for your target environment into `local.settings.json` → `Valu
 
 Set `APP_ENV` to `local`, `development`, or `production`. URL defaults change per environment; override any value explicitly.
 
+## Storage
+
+Set `STORAGE_MODE=cosmos` (default) for the hybrid layout:
+
+| Backend | Contents |
+| ------- | -------- |
+| **Cosmos DB** (`COSMOS_*`) | Households, members, **accounts** (bank/brokerage), **holdings**, tax profiles, scenarios, integration tokens, sync state |
+| **Azure SQL** (`AZURE_SQL_*`) | **Transactions** only |
+
+Local Docker (see `npm run dev:deps`):
+
+- Cosmos emulator: `https://localhost:8081` + emulator key in `local.settings.json.example`
+- SQL Server: `localhost:1433`, database `portfolio`, user `sa`
+
+Alternative: `STORAGE_MODE=disk` stores all data in `.local-data/` (no Cosmos/SQL). `STORAGE_MODE=memory` is for tests.
+
 ## SimpleFIN
 
 | Variable | Description |

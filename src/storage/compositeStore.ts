@@ -1,4 +1,4 @@
-import type { PortfolioDataStore } from "./types.js";
+import type { PortfolioStoreCore } from "./types.js";
 import type { SqlTransactionStore } from "../sql/transactionStore.js";
 
 export class SqlUnavailableError extends Error {
@@ -10,7 +10,7 @@ export class SqlUnavailableError extends Error {
   }
 }
 
-function unavailableTransactions(): PortfolioDataStore["transactions"] {
+function unavailableTransactions(): PortfolioStoreCore["transactions"] {
   const fail = async (): Promise<never> => {
     throw new SqlUnavailableError();
   };
@@ -24,9 +24,9 @@ function unavailableTransactions(): PortfolioDataStore["transactions"] {
 }
 
 export function createCompositeStore(
-  core: PortfolioDataStore,
-  transactions: PortfolioDataStore["transactions"]
-): PortfolioDataStore {
+  core: PortfolioStoreCore,
+  transactions: PortfolioStoreCore["transactions"]
+): PortfolioStoreCore {
   return {
     mode: core.mode,
     household: {
@@ -46,9 +46,9 @@ export function createCompositeStore(
 }
 
 export function createCompositeStoreWithSql(
-  core: PortfolioDataStore,
+  core: PortfolioStoreCore,
   sqlStore: SqlTransactionStore
-): PortfolioDataStore {
+): PortfolioStoreCore {
   return createCompositeStore(core, {
     list: (householdId, filter) => sqlStore.list(householdId, filter),
     upsert: (txn) => sqlStore.upsert(txn),

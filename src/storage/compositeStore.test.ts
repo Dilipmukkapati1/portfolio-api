@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createCompositeStore } from "./compositeStore.js";
-import type { PortfolioDataStore } from "./types.js";
+import type { PortfolioStoreCore } from "./types.js";
 
-function stubCore(): PortfolioDataStore {
+function stubCore(): PortfolioStoreCore {
   return {
     mode: "memory",
     household: {

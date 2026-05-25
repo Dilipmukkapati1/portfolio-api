@@ -1,6 +1,14 @@
-import { ensureCosmosReady, isCosmosConfigured } from "../cosmos/bootstrap.js";
-import { configureCosmosTlsForEmulator } from "../cosmos/client.js";
-import { probeSql } from "../sql/client.js";
+import {
+  ensureCosmosDatabase,
+  isCosmosConfigured,
+  resetCosmosBootstrap,
+  warmCosmosContainers,
+} from "../cosmos/bootstrap.js";
+import {
+  configureCosmosTlsForEmulator,
+  resetCosmosClient,
+} from "../cosmos/client.js";
+import { isSqlConfigured, probeSql } from "../sql/client.js";
 import { sqlTransactionStore } from "../sql/transactionStore.js";
 import { CosmosPortfolioStore } from "./cosmosStore.js";
 import {
@@ -9,8 +17,15 @@ import {
   unavailableTransactions,
 } from "./compositeStore.js";
 import { createDiskPortfolioStore } from "./diskStore.js";
+import { instrumentPortfolioStore } from "./instrumentation.js";
+import {
+  buildStorageSourceMap,
+  formatStorageSourceMap,
+  formatStorageSummary,
+  type TransactionsBackend,
+} from "./layout.js";
 import { MemoryPortfolioStore } from "./memoryStore.js";
-import type { PortfolioDataStore } from "./types.js";
+import type { PortfolioDataStore, PortfolioStoreCore } from "./types.js";
 
 let store: PortfolioDataStore | null = null;
 let initPromise: Promise<PortfolioDataStore> | null = null;
@@ -29,83 +44,156 @@ function shouldUseDisk(): boolean {
   return mode === "disk" || mode === "file" || mode === "local";
 }
 
+function prefersLocalStorage(): boolean {
+  return shouldUseDisk() || shouldPreferMemory();
+}
+
+function isCosmosStorageMode(): boolean {
+  const mode = storageMode();
+  return !mode || mode === "cosmos";
+}
+
+/** Optional SQL for transactions when STORAGE_MODE=disk|memory (default: all-local). */
+function useAzureSqlForTransactions(): boolean {
+  if (prefersLocalStorage()) {
+    return process.env.USE_AZURE_SQL === "true";
+  }
+  return isSqlConfigured();
+}
+
+function cosmosFallbackCoreStore(): PortfolioStoreCore {
+  const fallback = (process.env.COSMOS_FALLBACK ?? "disk").toLowerCase();
+  if (fallback === "memory") {
+    console.warn(
+      "[portfolio-api] Cosmos DB unavailable; core data using in-memory fallback."
+    );
+    return new MemoryPortfolioStore();
+  }
+
+  console.warn(
+    "[portfolio-api] Cosmos DB unavailable; core data using disk fallback (.local-data/portfolio-store.json)."
+  );
+  return createDiskPortfolioStore();
+}
+
 async function probeCosmos(): Promise<boolean> {
   if (!isCosmosConfigured()) return false;
   try {
     configureCosmosTlsForEmulator();
-    await ensureCosmosReady();
+    await ensureCosmosDatabase();
     return true;
   } catch (err) {
     console.warn(
-      "[portfolio-api] Cosmos DB unavailable; using in-memory storage for this session.",
+      "[portfolio-api] Cosmos DB unavailable.",
       err instanceof Error ? err.message : err
     );
     return false;
   }
 }
 
-async function resolveCoreStore(): Promise<PortfolioDataStore> {
+async function resolveCoreStore(): Promise<PortfolioStoreCore> {
   if (shouldPreferMemory()) {
     console.log("[portfolio-api] Storage core: memory (STORAGE_MODE=memory)");
     return new MemoryPortfolioStore();
   }
 
+  if (shouldUseDisk()) {
+    console.log("[portfolio-api] Storage core: disk (STORAGE_MODE=disk)");
+    return createDiskPortfolioStore();
+  }
+
   const cosmosOk = await probeCosmos();
   if (cosmosOk) {
-    console.log("[portfolio-api] Storage core: cosmos");
+    console.log(
+      "[portfolio-api] Storage core: cosmos (accounts, holdings, households)"
+    );
+    await warmCosmosContainers();
     return new CosmosPortfolioStore();
   }
 
-  if (shouldUseDisk()) {
-    console.log("[portfolio-api] Storage core: disk (STORAGE_MODE=disk, cosmos unavailable)");
-    return createDiskPortfolioStore();
+  if (isCosmosStorageMode()) {
+    return cosmosFallbackCoreStore();
   }
 
   console.log("[portfolio-api] Storage core: memory (cosmos fallback)");
   return new MemoryPortfolioStore();
 }
 
+function finalizeStore(
+  core: PortfolioStoreCore,
+  transactionsBackend: TransactionsBackend
+): PortfolioDataStore {
+  const sources = buildStorageSourceMap(core.mode, transactionsBackend);
+  console.log(
+    `[portfolio-api] Storage sources (${formatStorageSummary(sources)}): ${formatStorageSourceMap(sources)}`
+  );
+  return instrumentPortfolioStore(core, sources);
+}
+
+async function buildStore(): Promise<PortfolioDataStore> {
+  if (prefersLocalStorage()) {
+    const local = await resolveCoreStore();
+    const useSql = useAzureSqlForTransactions() && (await probeSql());
+    if (useSql) {
+      console.log(
+        `[portfolio-api] Storage: composite — ${local.mode} (local core) + Azure SQL (transactions)`
+      );
+      return finalizeStore(
+        createCompositeStoreWithSql(local, sqlTransactionStore),
+        "azure-sql"
+      );
+    }
+
+    console.log(
+      `[portfolio-api] Storage: ${local.mode} (local — accounts, transactions, and sync state on disk/in-memory)`
+    );
+    return finalizeStore(local, "local");
+  }
+
+  const sqlOk = useAzureSqlForTransactions() && (await probeSql());
+  const core = await resolveCoreStore();
+
+  if (sqlOk) {
+    console.log(
+      `[portfolio-api] Storage: composite — ${core.mode} (accounts, holdings, households) + Azure SQL (transactions)`
+    );
+    return finalizeStore(
+      createCompositeStoreWithSql(core, sqlTransactionStore),
+      "azure-sql"
+    );
+  }
+
+  if (isCosmosStorageMode()) {
+    console.warn(
+      "[portfolio-api] Azure SQL unavailable; transactions will fail until SQL is running (npm run dev:deps && npm run db:migrate)."
+    );
+  }
+
+  return finalizeStore(
+    createCompositeStore(core, unavailableTransactions()),
+    "unavailable"
+  );
+}
+
 export async function getDataStore(): Promise<PortfolioDataStore> {
   if (store) return store;
   if (!initPromise) {
-    initPromise = (async (): Promise<PortfolioDataStore> => {
-      const sqlOk = await probeSql();
-      const explicitLocal = shouldUseDisk() || shouldPreferMemory();
-
-      if (explicitLocal && !sqlOk) {
-        store = await resolveCoreStore();
-        console.warn(
-          "[portfolio-api] Transactions require Azure SQL. Set AZURE_SQL_* and run npm run db:migrate."
-        );
-        return store;
-      }
-
-      const core = await resolveCoreStore();
-
-      if (sqlOk) {
-        store = createCompositeStoreWithSql(core, sqlTransactionStore);
-        console.log(
-          "[portfolio-api] Storage: composite (core → cosmos/disk/memory, transactions → Azure SQL)"
-        );
-        return store;
-      }
-
-      if (explicitLocal) {
-        store = core;
-        return store;
-      }
-
-      store = createCompositeStore(core, unavailableTransactions());
-      console.warn(
-        "[portfolio-api] Azure SQL unavailable; transaction routes will fail until SQL is configured."
-      );
-      return store;
-    })();
+    initPromise = buildStore().then((built) => {
+      store = built;
+      return built;
+    });
   }
   return initPromise;
 }
 
-export function resetDataStoreForTests(): void {
+/** Clear cached clients so the next request can reconnect or use disk fallback. */
+export function resetStorageConnection(): void {
   store = null;
   initPromise = null;
+  resetCosmosBootstrap();
+  resetCosmosClient();
+}
+
+export function resetDataStoreForTests(): void {
+  resetStorageConnection();
 }

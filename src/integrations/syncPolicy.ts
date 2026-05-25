@@ -24,8 +24,21 @@ export async function isSimplefinConnected(
   return Boolean(token || secret);
 }
 
-export async function canSyncSimplefin(householdId: string): Promise<boolean> {
-  if (!(await isSimplefinConnected(householdId))) return false;
+export type SimplefinSyncBlockReason =
+  | { blocked: false }
+  | { blocked: true; status: 400 | 429; message: string };
+
+export async function getSimplefinSyncBlockReason(
+  householdId: string
+): Promise<SimplefinSyncBlockReason> {
+  if (!(await isSimplefinConnected(householdId))) {
+    return {
+      blocked: true,
+      status: 400,
+      message:
+        "SimpleFIN is not connected. Connect with a setup token on the Connections page first.",
+    };
+  }
 
   const state = await integrationRepository.getSyncState(
     householdId,
@@ -33,9 +46,20 @@ export async function canSyncSimplefin(householdId: string): Promise<boolean> {
   );
   const today = new Date().toISOString().slice(0, 10);
   const lastDate = state?.lastSyncedAt?.slice(0, 10);
-  const count =
-    lastDate === today ? (state?.dailyRequestCount ?? 0) : 0;
-  return count < SIMPLEFIN_DAILY_LIMIT;
+  const count = lastDate === today ? (state?.dailyRequestCount ?? 0) : 0;
+  if (count >= SIMPLEFIN_DAILY_LIMIT) {
+    return {
+      blocked: true,
+      status: 429,
+      message: "SimpleFIN daily request limit (24) reached. Try again tomorrow.",
+    };
+  }
+
+  return { blocked: false };
+}
+
+export async function canSyncSimplefin(householdId: string): Promise<boolean> {
+  return !(await getSimplefinSyncBlockReason(householdId)).blocked;
 }
 
 export async function isSnaptradeConnected(

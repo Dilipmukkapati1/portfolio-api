@@ -7,6 +7,8 @@
   "KEY_VAULT_NAME": "YOUR-PROD-KEYVAULT",
   "COSMOS_ENDPOINT": "https://YOUR-PROD-COSMOS.documents.azure.com:443/",
   "COSMOS_DATABASE": "portfolio",
+  "AZURE_SQL_SERVER": "YOUR-PROD-SQL.database.windows.net",
+  "AZURE_SQL_DATABASE": "portfolio",
   "SIMPLEFIN_ACCESS_URL": "",
   "SIMPLEFIN_ACCESS_URL__PROD_HOUSEHOLD": "",
   "SNAPTRADE_CLIENT_ID": "",

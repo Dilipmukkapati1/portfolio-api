@@ -14,25 +14,25 @@ import type {
 } from "@portfolio/contracts";
 import { resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts";
 import { randomUUID } from "node:crypto";
-import { getContainer } from "../cosmos/client.js";
+import { getContainerReady } from "../cosmos/bootstrap.js";
 import { unavailableTransactions } from "./compositeStore.js";
-import type { PortfolioDataStore } from "./types.js";
+import type { PortfolioStoreCore } from "./types.js";
 
-export class CosmosPortfolioStore implements PortfolioDataStore {
+export class CosmosPortfolioStore implements PortfolioStoreCore {
   readonly mode = "cosmos" as const;
 
   transactions = unavailableTransactions();
 
   household = {
     list: async (): Promise<Household[]> => {
-      const { resources } = await getContainer("households")
+      const { resources } = await (await getContainerReady("households"))
         .items.readAll<Household>()
         .fetchAll();
       return resources ?? [];
     },
 
     get: async (householdId: string): Promise<Household | null> => {
-      const container = getContainer("households");
+      const container = (await getContainerReady("households"));
       try {
         const { resource } = await container
           .item(householdId, householdId)
@@ -61,7 +61,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
         createdAt: now,
         updatedAt: now,
       };
-      await getContainer("households").items.create(doc);
+      await (await getContainerReady("households")).items.create(doc);
       return doc;
     },
 
@@ -85,7 +85,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
         state: primaryState,
         updatedAt: new Date().toISOString(),
       };
-      await getContainer("households")
+      await (await getContainerReady("households"))
         .item(householdId, householdId)
         .replace(updated);
       return updated;
@@ -95,7 +95,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
       try {
         await cosmosPortfolioStore.members.deleteAllForHousehold(householdId);
         await cosmosPortfolioStore.taxProfiles.deleteAllForHousehold(householdId);
-        await getContainer("households")
+        await (await getContainerReady("households"))
           .item(householdId, householdId)
           .delete();
         return true;
@@ -113,7 +113,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
       if (!existing) return;
       existing.netWorthSummary = summary;
       existing.updatedAt = new Date().toISOString();
-      await getContainer("households")
+      await (await getContainerReady("households"))
         .item(householdId, householdId)
         .replace(existing);
     },
@@ -121,7 +121,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
 
   members = {
     listByHousehold: async (householdId: string): Promise<Member[]> => {
-      const { resources } = await getContainer("members")
+      const { resources } = await (await getContainerReady("members"))
         .items.query<Member>({
           query: "SELECT * FROM c WHERE c.householdId = @hid",
           parameters: [{ name: "@hid", value: householdId }],
@@ -132,7 +132,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
 
     get: async (householdId: string, memberId: string): Promise<Member | null> => {
       try {
-        const { resource } = await getContainer("members")
+        const { resource } = await (await getContainerReady("members"))
           .item(memberId, householdId)
           .read<Member>();
         return resource ?? null;
@@ -160,7 +160,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
         createdAt: now,
         updatedAt: now,
       };
-      await getContainer("members").items.create(doc);
+      await (await getContainerReady("members")).items.create(doc);
       return doc;
     },
 
@@ -179,7 +179,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
         ...data,
         updatedAt: new Date().toISOString(),
       };
-      await getContainer("members")
+      await (await getContainerReady("members"))
         .item(memberId, householdId)
         .replace(updated);
       return updated;
@@ -187,7 +187,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
 
     delete: async (householdId: string, memberId: string): Promise<boolean> => {
       try {
-        await getContainer("members").item(memberId, householdId).delete();
+        await (await getContainerReady("members")).item(memberId, householdId).delete();
         return true;
       } catch (err: unknown) {
         if ((err as { code?: number }).code === 404) return false;
@@ -221,7 +221,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
           createdAt: now,
           updatedAt: now,
         };
-        await getContainer("members").items.create(doc);
+        await (await getContainerReady("members")).items.create(doc);
         created.push(doc);
       }
       return created;
@@ -232,7 +232,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
         householdId
       );
       for (const m of members) {
-        await getContainer("members").item(m.id, householdId).delete();
+        await (await getContainerReady("members")).item(m.id, householdId).delete();
       }
     },
   };
@@ -241,7 +241,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
     get: async (householdId: string, taxYear: number): Promise<TaxProfile | null> => {
       const id = taxProfileDocumentId(householdId, taxYear);
       try {
-        const { resource } = await getContainer("taxProfiles")
+        const { resource } = await (await getContainerReady("taxProfiles"))
           .item(id, householdId)
           .read<TaxProfile>();
         return resource ?? null;
@@ -252,14 +252,14 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
     },
 
     upsert: async (profile: TaxProfile): Promise<TaxProfile> => {
-      const { resource } = await getContainer("taxProfiles").items.upsert(profile);
+      const { resource } = await (await getContainerReady("taxProfiles")).items.upsert(profile);
       return resource as unknown as TaxProfile;
     },
 
     delete: async (householdId: string, taxYear: number): Promise<boolean> => {
       const id = taxProfileDocumentId(householdId, taxYear);
       try {
-        await getContainer("taxProfiles").item(id, householdId).delete();
+        await (await getContainerReady("taxProfiles")).item(id, householdId).delete();
         return true;
       } catch (err: unknown) {
         if ((err as { code?: number }).code === 404) return false;
@@ -268,21 +268,21 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
     },
 
     deleteAllForHousehold: async (householdId: string) => {
-      const { resources } = await getContainer("taxProfiles")
+      const { resources } = await (await getContainerReady("taxProfiles"))
         .items.query<TaxProfile>({
           query: "SELECT * FROM c WHERE c.householdId = @hid",
           parameters: [{ name: "@hid", value: householdId }],
         })
         .fetchAll();
       for (const p of resources) {
-        await getContainer("taxProfiles").item(p.id, householdId).delete();
+        await (await getContainerReady("taxProfiles")).item(p.id, householdId).delete();
       }
     },
   };
 
   accounts = {
     listByHousehold: async (householdId: string): Promise<Account[]> => {
-      const { resources } = await getContainer("accounts")
+      const { resources } = await (await getContainerReady("accounts"))
         .items.query<Account>({
           query: "SELECT * FROM c WHERE c.householdId = @hid",
           parameters: [{ name: "@hid", value: householdId }],
@@ -292,7 +292,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
     },
 
     upsert: async (account: Account): Promise<Account> => {
-      const { resource } = await getContainer("accounts").items.upsert(account);
+      const { resource } = await (await getContainerReady("accounts")).items.upsert(account);
       return resource as unknown as Account;
     },
 
@@ -301,7 +301,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
       source: string,
       externalId: string
     ): Promise<Account | null> => {
-      const { resources } = await getContainer("accounts")
+      const { resources } = await (await getContainerReady("accounts"))
         .items.query<Account>({
           query:
             "SELECT * FROM c WHERE c.householdId = @hid AND c.source = @src AND c.externalId = @eid",
@@ -318,7 +318,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
 
   holdings = {
     listByHousehold: async (householdId: string): Promise<Holding[]> => {
-      const { resources } = await getContainer("holdings")
+      const { resources } = await (await getContainerReady("holdings"))
         .items.query<Holding>({
           query: "SELECT * FROM c WHERE c.householdId = @hid",
           parameters: [{ name: "@hid", value: householdId }],
@@ -328,19 +328,19 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
     },
 
     upsert: async (holding: Holding): Promise<Holding> => {
-      const { resource } = await getContainer("holdings").items.upsert(holding);
+      const { resource } = await (await getContainerReady("holdings")).items.upsert(holding);
       return resource as unknown as Holding;
     },
 
     delete: async (householdId: string, id: string): Promise<void> => {
-      await getContainer("holdings").item(id, householdId).delete();
+      await (await getContainerReady("holdings")).item(id, householdId).delete();
     },
   };
 
   integrations = {
     getToken: async (householdId: string, provider: string) => {
       try {
-        const { resource } = await getContainer("integrationTokens")
+        const { resource } = await (await getContainerReady("integrationTokens"))
           .item(provider, householdId)
           .read<IntegrationToken>();
         return resource ?? null;
@@ -350,12 +350,12 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
     },
 
     upsertToken: async (token: IntegrationToken) => {
-      await getContainer("integrationTokens").items.upsert(token);
+      await (await getContainerReady("integrationTokens")).items.upsert(token);
     },
 
     getSyncState: async (householdId: string, provider: string) => {
       try {
-        const { resource } = await getContainer("syncState")
+        const { resource } = await (await getContainerReady("syncState"))
           .item(provider, householdId)
           .read<SyncState>();
         return resource ?? null;
@@ -365,7 +365,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
     },
 
     upsertSyncState: async (state: SyncState) => {
-      await getContainer("syncState").items.upsert(state);
+      await (await getContainerReady("syncState")).items.upsert(state);
     },
 
     recordWebhookEvent: async (
@@ -374,7 +374,7 @@ export class CosmosPortfolioStore implements PortfolioDataStore {
       payload: Record<string, unknown>
     ) => {
       try {
-        await getContainer("webhookEvents").items.create({
+        await (await getContainerReady("webhookEvents")).items.create({
           id: eventId,
           householdId,
           eventId,

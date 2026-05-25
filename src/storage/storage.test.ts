@@ -10,6 +10,7 @@ describe("storage", () => {
     delete process.env.STORAGE_MODE;
     delete process.env.LOCAL_STORAGE_PATH;
     delete process.env.COSMOS_ENDPOINT;
+    delete process.env.USE_AZURE_SQL;
   });
 
   it("uses memory when STORAGE_MODE=memory", async () => {
@@ -60,6 +61,29 @@ describe("storage", () => {
     expect(reloaded.mode).toBe("disk");
     const household = await reloaded.household.get("persist-h1");
     expect(household?.displayName).toBe("Persisted");
+
+    await store.transactions.upsert({
+      id: "txn-1",
+      householdId: "persist-h1",
+      txnId: "txn-1",
+      accountId: "acct-1",
+      source: "simplefin",
+      amount: -12.5,
+      currency: "USD",
+      date: "2026-05-01",
+      description: "Coffee",
+      category: "food",
+      categorySource: "auto",
+      pending: false,
+      createdAt: "2026-05-01T12:00:00.000Z",
+      updatedAt: "2026-05-01T12:00:00.000Z",
+    });
+
+    resetDataStoreForTests();
+    const withTxn = await getDataStore();
+    const txns = await withTxn.transactions.list("persist-h1", { limit: 10 });
+    expect(txns).toHaveLength(1);
+    expect(txns[0]?.description).toBe("Coffee");
 
     fs.rmSync(dir, { recursive: true, force: true });
   });

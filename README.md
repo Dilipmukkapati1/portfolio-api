@@ -7,7 +7,8 @@ Azure Functions v4 (TypeScript) — Cosmos DB, Key Vault, SimpleFIN, SnapTrade.
 - Node 20+
 - [Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local) v4
 - [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) (queues/storage)
-- Cosmos DB Emulator or dev Cosmos account — **optional** if `STORAGE_MODE=disk` (default in `local.settings.json.example`) or `STORAGE_MODE=memory`
+- Cosmos DB Emulator + SQL Server (local Docker) — required for default `STORAGE_MODE=cosmos`
+- Or use `STORAGE_MODE=disk` for fully local JSON storage (no Cosmos/SQL)
 
 ## Local run
 
@@ -30,15 +31,34 @@ npm install && npm run build
 npm start
 ```
 
-By default, local settings use **`STORAGE_MODE=cosmos`** with the Cosmos emulator for households, accounts, holdings, and sync state. **Transactions** are stored in **Azure SQL** when `AZURE_SQL_*` is set (included in `local.settings.json.example`).
+By default, local settings use **`STORAGE_MODE=cosmos`** with a split storage model:
+
+| Store | Data |
+| ----- | ---- |
+| **Cosmos DB** | Households, bank/brokerage **accounts**, **holdings** / investments, tax profiles, integration tokens, sync state |
+| **Azure SQL** | **Transactions** (SimpleFIN / manual imports) |
+
+Start dependencies, then the API:
 
 ```bash
-npm run dev:deps      # Azurite + Cosmos emulator + SQL Server
-npm run db:migrate    # Liquibase schema
+npm run dev:deps      # Azurite + Cosmos emulator + SQL Server; waits for Cosmos/SQL readiness
+npm run db:migrate    # Liquibase schema for transactions table
 npm start
 ```
 
-Use `STORAGE_MODE=disk` only when the Cosmos emulator is unavailable (core data falls back to `.local-data/portfolio-store.json`; transactions still require SQL). Use `STORAGE_MODE=memory` for ephemeral in-process storage in tests.
+The Cosmos emulator is heavy (~3 GB RAM) and needs **ports 8081 and 10250–10255** exposed. If it crashes on requests, run a clean reset:
+
+```bash
+npm run cosmos:reset    # pull latest image, clear .cosmos, restart
+```
+
+Increase **Docker Desktop → Settings → Resources → Memory** to at least **10 GB** if the emulator keeps exiting. With only ~8 GB allocated to Docker, Cosmos + SQL compete for RAM.
+
+If Cosmos is down when the API starts, it **automatically falls back to disk** (`.local-data/portfolio-store.json`) for accounts/holdings while SQL still handles transactions.
+
+For offline dev without Cosmos/SQL, set `STORAGE_MODE=disk` — everything persists to `.local-data/portfolio-store.json`.
+
+Use `STORAGE_MODE=memory` for ephemeral in-process storage in tests.
 
 **SimpleFIN locally:** When `KEY_VAULT_NAME` is empty, claimed Access URLs are saved to `.local-secrets.json` (gitignored) so setup tokens are not wasted on retry. Each setup token from [SimpleFIN Bridge](https://bridge.simplefin.org/simplefin/create) can only be claimed once — generate a new token if connect fails.
 

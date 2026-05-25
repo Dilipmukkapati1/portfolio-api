@@ -15,8 +15,9 @@ import type {
   UpdateMemberRequest,
   UpsertTaxProfileRequest,
 } from "@portfolio/contracts";
+import type { StorageSourceMap } from "./layout.js";
 
-export interface PortfolioDataStore {
+export interface PortfolioStoreCore {
   readonly mode: "cosmos" | "memory" | "disk";
 
   household: {
@@ -93,4 +94,8 @@ export interface PortfolioDataStore {
       payload: Record<string, unknown>
     ): Promise<boolean>;
   };
+}
+
+export interface PortfolioDataStore extends PortfolioStoreCore {
+  readonly sources: StorageSourceMap;
 }

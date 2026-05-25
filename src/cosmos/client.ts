@@ -63,3 +63,8 @@ export function getContainer(name: string): Container {
   }
   return database.container(name);
 }
+
+export function resetCosmosClient(): void {
+  client = null;
+  database = null;
+}

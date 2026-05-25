@@ -1,5 +1,7 @@
 import type { Account, Holding, Transaction } from "@portfolio/contracts";
 import { categorizeInvestment } from "@portfolio/contracts";
+import { getDataStore } from "../../storage/index.js";
+import { formatStorageSourceMap } from "../../storage/layout.js";
 import { accountRepository } from "../../cosmos/repositories/accountRepository.js";
 import { transactionRepository } from "../../cosmos/repositories/transactionRepository.js";
 import { householdRepository } from "../../cosmos/repositories/householdRepository.js";
@@ -56,6 +58,11 @@ export async function syncSimplefinForHousehold(
 
   assertValidAccessUrl(accessUrl);
 
+  const store = await getDataStore();
+  console.log(
+    `[portfolio-api] SimpleFIN sync data sources: ${formatStorageSourceMap(store.sources)}`
+  );
+
   const client = new SimpleFinClient(accessUrl);
   const now = new Date().toISOString();
   const previousSyncState = await integrationRepository.getSyncState(
@@ -73,6 +80,10 @@ export async function syncSimplefinForHousehold(
       .filter((account) => account.isActive)
       .map((account) => account.lastSyncedAt),
   });
+
+  console.log(
+    `[portfolio-api] SimpleFIN sync window: mode=${syncWindow.mode} startDate=${syncWindow.startDate} external=SimpleFIN API`
+  );
 
   let apiRequestCount = 0;
   let data = await client.fetchAccounts(syncWindow.startDate);
@@ -154,6 +165,11 @@ export async function syncSimplefinForHousehold(
   });
 
   await recomputeNetWorth(householdId);
+
+  console.log(
+    `[portfolio-api] SimpleFIN sync complete householdId=${householdId} accounts=${data.accounts?.length ?? 0} transactions=${txnCount} holdings=${holdingCount} writes→accounts=${store.sources.entities.accounts} transactions=${store.sources.entities.transactions} holdings=${store.sources.entities.holdings}`
+  );
+
   return {
     accounts: data.accounts?.length ?? 0,
     transactions: txnCount,

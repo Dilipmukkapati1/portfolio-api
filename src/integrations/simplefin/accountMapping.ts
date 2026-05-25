@@ -198,6 +198,10 @@ export function resolveSimplefinSyncWindow(options: {
     );
   }
 
+  if (starts.length === 0) {
+    return { mode: "hard", startDate: hardRefreshStartDate() };
+  }
+
   return {
     mode: "incremental",
     startDate: String(Math.min(...starts)),

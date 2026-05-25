@@ -16,7 +16,7 @@ import type {
 } from "@portfolio/contracts";
 import { resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts";
 import { randomUUID } from "node:crypto";
-import type { PortfolioDataStore } from "./types.js";
+import type { PortfolioStoreCore } from "./types.js";
 
 export interface MemoryStoreSnapshot {
   households: Household[];
@@ -46,7 +46,7 @@ function getPartition<T extends { householdId: string; id: string }>(
   return part;
 }
 
-export class MemoryPortfolioStore implements PortfolioDataStore {
+export class MemoryPortfolioStore implements PortfolioStoreCore {
   readonly mode = "memory" as const;
 
   private households = new Map<string, Household>();

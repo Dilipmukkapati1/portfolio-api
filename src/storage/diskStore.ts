@@ -1,8 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { MemoryPortfolioStore } from "./memoryStore.js";
-import { unavailableTransactions } from "./compositeStore.js";
-import type { PortfolioDataStore } from "./types.js";
+import type { PortfolioStoreCore } from "./types.js";
 
 const DEFAULT_DISK_PATH = path.join(
   process.cwd(),
@@ -49,14 +48,13 @@ function saveToDisk(store: MemoryPortfolioStore, filePath: string): void {
   const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
   const tmpPath = `${filePath}.tmp`;
-  const { transactionData: _transactions, ...coreSnapshot } = store.toSnapshot();
-  fs.writeFileSync(tmpPath, `${JSON.stringify(coreSnapshot, null, 2)}\n`);
+  fs.writeFileSync(tmpPath, `${JSON.stringify(store.toSnapshot(), null, 2)}\n`);
   fs.renameSync(tmpPath, filePath);
 }
 
 export function createDiskPortfolioStore(
   filePath: string = resolveDiskPath()
-): PortfolioDataStore {
+): PortfolioStoreCore {
   const inner = new MemoryPortfolioStore();
   loadFromDisk(inner, filePath);
   const persist = () => saveToDisk(inner, filePath);
@@ -82,7 +80,11 @@ export function createDiskPortfolioStore(
       "deleteAllForHousehold",
     ]),
     accounts: wrapMutations(inner.accounts, persist, ["upsert"]),
-    transactions: unavailableTransactions(),
+    transactions: wrapMutations(inner.transactions, persist, [
+      "upsert",
+      "replace",
+      "deleteAllForHousehold",
+    ]),
     holdings: wrapMutations(inner.holdings, persist, ["upsert", "delete"]),
     integrations: wrapMutations(inner.integrations, persist, [
       "upsertToken",

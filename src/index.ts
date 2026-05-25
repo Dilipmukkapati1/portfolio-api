@@ -1,3 +1,6 @@
+import { isCosmosConfigured } from "./cosmos/bootstrap.js";
+import { formatStorageSummary } from "./storage/layout.js";
+import { getDataStore } from "./storage/index.js";
 import "./functions/docs.js";
 import "./functions/health.js";
 import "./functions/household.js";
@@ -19,3 +22,11 @@ import "./functions/queueWorker.js";
 import "./functions/timerDailySync.js";
 import "./functions/timerNightly.js";
 import "./functions/submitBatch.js";
+
+if (isCosmosConfigured()) {
+  void getDataStore().then((store) =>
+    console.log(
+      `[portfolio-api] Storage warmup: ${formatStorageSummary(store.sources)}`
+    )
+  );
+}
