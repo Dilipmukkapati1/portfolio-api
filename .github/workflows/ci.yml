@@ -52,8 +52,13 @@ jobs:
             update
       - name: Deploy Function App
         run: |
-          cd dist && zip -r ../api.zip .
+          zip -rq api.zip host.json package.json dist node_modules \
+            -x "node_modules/azure-functions-core-tools/*" \
+            -x "node_modules/azurite/*" \
+            -x "node_modules/@types/*" \
+            -x "node_modules/typescript/*" \
+            -x "node_modules/vitest/*"
           az functionapp deployment source config-zip \
             -g rg-portfolio \
             -n ${{ vars.FUNCTION_APP_NAME }} \
-            --src ../api.zip
+            --src api.zip

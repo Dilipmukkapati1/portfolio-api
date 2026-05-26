@@ -62,16 +62,91 @@ tf_sql_admin_login() {
 }
 
 tf_sql_database_dev() {
+  tf_sql_database_for_env dev
+}
+
+# Validate deploy target: dev | prod
+validate_deploy_env() {
+  local env="$1"
+  case "$env" in
+    dev|prod) return 0 ;;
+    *)
+      echo "Invalid environment '$env'. Use: dev or prod" >&2
+      return 1
+      ;;
+  esac
+}
+
+tf_resource_group_name() {
+  local rg
+  rg="$(tf_output_raw_optional resource_group_name)"
+  if [[ -n "$rg" ]]; then
+    echo "$rg"
+    return
+  fi
+  echo "rg-portfolio"
+}
+
+tf_function_app_name() {
+  local env="$1"
+  validate_deploy_env "$env"
+  require_tf_output "${env}_function_app_name" "Run: cd portfolio-infra && make apply-${env}"
+  tf_output_raw "${env}_function_app_name"
+}
+
+tf_function_app_url() {
+  local env="$1"
+  validate_deploy_env "$env"
+  require_tf_output "${env}_function_app_url" "Run: cd portfolio-infra && make apply-${env}"
+  tf_output_raw "${env}_function_app_url"
+}
+
+tf_static_web_app_name() {
+  local env="$1"
+  validate_deploy_env "$env"
+  require_tf_output "${env}_static_web_app_name" "Run: cd portfolio-infra && make apply-${env}"
+  tf_output_raw "${env}_static_web_app_name"
+}
+
+tf_static_web_app_hostname() {
+  local env="$1"
+  validate_deploy_env "$env"
+  require_tf_output "${env}_static_web_app_hostname" "Run: cd portfolio-infra && make apply-${env}"
+  tf_output_raw "${env}_static_web_app_hostname"
+}
+
+tf_sql_database_for_env() {
+  local env="$1"
+  validate_deploy_env "$env"
   local db
-  db="$(tf_output_raw_optional sql_database_dev)"
+  if [[ "$env" == "dev" ]]; then
+    db="$(tf_output_raw_optional sql_database_dev)"
+    if [[ -n "$db" ]]; then
+      echo "$db"
+      return
+    fi
+    db="$(terraform -chdir="${PORTFOLIO_INFRA_TF_DIR}" output -json sql_database_names 2>/dev/null | jq -r '.[] | select(endswith("-dev"))' | head -1)"
+    if [[ -n "$db" ]]; then
+      echo "$db"
+      return
+    fi
+    echo "sqldb-dev"
+    return
+  fi
+  db="$(terraform -chdir="${PORTFOLIO_INFRA_TF_DIR}" output -json sql_database_names 2>/dev/null | jq -r '.[] | select(endswith("-prod"))' | head -1)"
   if [[ -n "$db" ]]; then
     echo "$db"
     return
   fi
-  db="$(terraform -chdir="${PORTFOLIO_INFRA_TF_DIR}" output -json sql_database_names 2>/dev/null | jq -r '.[] | select(endswith("-dev"))' | head -1)"
-  if [[ -n "$db" ]]; then
-    echo "$db"
-    return
-  fi
-  echo "sqldb-dev"
+  echo "sqldb-prod"
+}
+
+tf_sql_server_fqdn() {
+  require_tf_output sql_server_fqdn
+  tf_output_raw sql_server_fqdn
+}
+
+tf_sql_admin_password() {
+  require_tf_output sql_admin_password
+  tf_output_raw sql_admin_password
 }

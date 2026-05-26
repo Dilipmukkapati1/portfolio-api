@@ -88,6 +88,32 @@ If Cosmos is unreachable at startup, the API **falls back to disk** for entities
 
 Health: `GET http://localhost:7071/api/health`
 
+## Deploy (Azure)
+
+Deploy the Function App from your machine (same zip deploy as CI). Resource names come from `portfolio-infra` Terraform outputs.
+
+**Prerequisites:** `az login`, dev stack applied (`cd ../portfolio-infra && make apply-dev`; prod needs `make apply-prod`), Node 20+, `zip`, `terraform`, `jq`. Migrations prefer Docker (`liquibase/liquibase:4.31`); if Docker is not running, the deploy script falls back to local Liquibase (`brew install liquibase`). For Azure SQL from your machine, allow your IP in `portfolio-infra/terraform/terraform.tfvars` (`sql_allow_current_client_ip = true`).
+
+```bash
+npm run deploy:dev              # dev Function App
+npm run deploy:prod             # prod — prompts: type prod to confirm
+npm run deploy -- dev --skip-migrate
+npm run deploy -- prod --skip-build
+```
+
+| Script | Purpose |
+| ------ | ------- |
+| `deploy:dev` | Build, migrate `sqldb-dev`, deploy dev app |
+| `deploy:prod` | Same for prod (`sqldb-prod`) after confirmation |
+| `--skip-migrate` | Skip Liquibase (code-only deploy) |
+| `--skip-build` | Deploy existing `dist/` only |
+
+Run migrations only (Terraform credentials, Docker or local Liquibase): `bash scripts/db-migrate-terraform.sh dev`
+
+Deploy does **not** change Function App settings (Terraform + Key Vault remain the source of truth). After deploy, verify: `GET https://<function-app>/api/health`.
+
+Deploy the web app separately: `cd ../portfolio-web && npm run deploy:dev`.
+
 ## API documentation (Swagger)
 
 With the API running:
