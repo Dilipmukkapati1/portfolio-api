@@ -1,4 +1,10 @@
-import type { Account, Holding, Member, TransactionSummaryResponse } from "@portfolio/contracts";
+import {
+  categorizeInvestment,
+  type Account,
+  type Holding,
+  type Member,
+  type TransactionSummaryResponse,
+} from "@portfolio/contracts";
 import { accountRepository } from "../cosmos/repositories/accountRepository.js";
 import { holdingRepository } from "../cosmos/repositories/holdingRepository.js";
 import { memberRepository } from "../cosmos/repositories/memberRepository.js";
@@ -6,6 +12,8 @@ import { accountValue, holdingValue, redactTransactionSummary } from "./privacyR
 import { summarizePeriod } from "./transactionSummaryService.js";
 
 const SAFE_WITHDRAWAL_RATE = 0.04;
+const BANK_ACCOUNT_TYPES = new Set(["depository", "checking", "savings"]);
+const CREDIT_ACCOUNT_TYPES = new Set(["credit", "loan"]);
 
 function roundPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -15,6 +23,145 @@ function roundPercent(value: number): number {
 function percent(part: number, total: number): number {
   if (total <= 0) return 0;
   return roundPercent((part / total) * 100);
+}
+
+function isLikelyBankAccountName(displayName: string): boolean {
+  const lower = displayName.toLowerCase();
+  return (
+    lower.includes("checking") ||
+    lower.includes("chequing") ||
+    lower.includes("savings") ||
+    (lower.includes("cash") && !lower.includes("brokerage"))
+  );
+}
+
+function isCashHolding(holding: Holding): boolean {
+  if (holding.symbol.trim().toUpperCase() === "CASH") return true;
+  if (holding.category === "cash") return true;
+  return (
+    categorizeInvestment({
+      symbol: holding.symbol,
+      description: holding.description,
+    }) === "cash"
+  );
+}
+
+function hasSecurities(holdings: Holding[]): boolean {
+  return holdings.some(
+    (holding) =>
+      !isCashHolding(holding) &&
+      ((holding.marketValue ?? 0) > 0 || holding.quantity > 0)
+  );
+}
+
+function isCreditAccount(account: Account): boolean {
+  const type = (account.accountType ?? "").toLowerCase();
+  if (CREDIT_ACCOUNT_TYPES.has(type)) return true;
+  if (BANK_ACCOUNT_TYPES.has(type) || type === "investment") return false;
+
+  const name = account.displayName.toLowerCase();
+  return (
+    name.includes("credit card") ||
+    name.includes(" visa") ||
+    name.includes(" mastercard") ||
+    name.includes(" amex") ||
+    name.includes("mortgage")
+  );
+}
+
+function isInvestmentAccount(
+  account: Account,
+  holdingsByAccount: Map<string, Holding[]>
+): boolean {
+  if (account.source === "snaptrade") return true;
+
+  const holdings = holdingsByAccount.get(account.accountId) ?? [];
+  if (hasSecurities(holdings)) return true;
+
+  const type = (account.accountType ?? "").toLowerCase();
+  if (type !== "investment") return false;
+
+  return !isLikelyBankAccountName(account.displayName);
+}
+
+function isBankAccount(
+  account: Account,
+  holdingsByAccount: Map<string, Holding[]>
+): boolean {
+  if (isInvestmentAccount(account, holdingsByAccount)) return false;
+  if (isCreditAccount(account)) return false;
+  if (account.source === "snaptrade") return false;
+
+  const type = (account.accountType ?? "").toLowerCase();
+  if (BANK_ACCOUNT_TYPES.has(type)) return true;
+  if (type === "credit" || type === "loan") return false;
+
+  return account.source === "simplefin" || account.source === "manual";
+}
+
+function holdingsByAccount(holdings: Holding[]): Map<string, Holding[]> {
+  const byAccount = new Map<string, Holding[]>();
+  for (const holding of holdings) {
+    const accountHoldings = byAccount.get(holding.accountId) ?? [];
+    accountHoldings.push(holding);
+    byAccount.set(holding.accountId, accountHoldings);
+  }
+  return byAccount;
+}
+
+function investmentAccountCashBalance(account: Account, holdings: Holding[]): number {
+  if (holdings.length === 0) {
+    return Math.max(account.balance ?? 0, 0);
+  }
+
+  const cashFromHoldings = holdings
+    .filter(isCashHolding)
+    .reduce((sum, holding) => sum + holdingValue(holding), 0);
+  const securitiesValue = holdings
+    .filter((holding) => !isCashHolding(holding))
+    .reduce((sum, holding) => sum + holdingValue(holding), 0);
+
+  if (hasSecurities(holdings)) {
+    const balance = account.balance ?? 0;
+    const residual = balance > 0 ? Math.max(0, balance - securitiesValue) : 0;
+    return Math.max(cashFromHoldings, residual);
+  }
+
+  return Math.max(cashFromHoldings, Math.max(account.balance ?? 0, 0));
+}
+
+function bankAccountCashBalance(account: Account, holdings: Holding[]): number {
+  if (holdings.length === 0) {
+    return Math.max(account.balance ?? 0, 0);
+  }
+
+  const cashFromHoldings = holdings
+    .filter(isCashHolding)
+    .reduce((sum, holding) => sum + holdingValue(holding), 0);
+  if (cashFromHoldings > 0) return cashFromHoldings;
+
+  return Math.max(account.balance ?? 0, 0);
+}
+
+export function computeUninvestedCash(
+  accounts: Account[],
+  holdings: Holding[]
+): number {
+  const byAccount = holdingsByAccount(holdings);
+  let total = 0;
+
+  for (const account of accounts) {
+    if (account.isActive === false || isCreditAccount(account)) continue;
+
+    const accountHoldings = byAccount.get(account.accountId) ?? [];
+    if (isInvestmentAccount(account, byAccount)) {
+      total += investmentAccountCashBalance(account, accountHoldings);
+    } else if (isBankAccount(account, byAccount)) {
+      total += bankAccountCashBalance(account, accountHoldings);
+    }
+  }
+
+  return total;
 }
 
 function currentMonthStart(): string {
@@ -161,9 +308,7 @@ export async function getDashboardAnalytics(
         ...freedomScore,
       },
       netWorth,
-      uninvestedCash: accounts
-        .filter((account) => account.source !== "snaptrade")
-        .reduce((sum, account) => sum + Math.max(0, account.balance ?? 0), 0),
+      uninvestedCash: computeUninvestedCash(accounts, holdings),
     },
   };
 }
