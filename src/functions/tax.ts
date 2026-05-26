@@ -13,10 +13,12 @@ import { householdRepository } from "../cosmos/repositories/householdRepository.
 import { taxProfileRepository } from "../cosmos/repositories/taxProfileRepository.js";
 import { getAuthContext } from "../lib/auth.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
+import { getPrivacyContext, requirePrivacyUnlock } from "../lib/privacy.js";
 import {
   enrichHousehold,
   getOrCreateTaxProfile,
 } from "../services/householdTaxService.js";
+import { redactTaxProfile } from "../services/privacyRedact.js";
 
 async function taxEstimateHandler(
   request: HttpRequest,
@@ -44,6 +46,10 @@ async function taxEstimateHandler(
 
   const body = await request.json().catch(() => ({}));
   const hasBody = body && typeof body === "object" && Object.keys(body).length > 0;
+  if (hasBody) {
+    const locked = await requirePrivacyUnlock(request, auth.householdId);
+    if (locked) return locked;
+  }
   const parsed = hasBody
     ? TaxYearInputSchema.safeParse(body)
     : { success: true as const, data: profile?.inputs };
@@ -57,7 +63,23 @@ async function taxEstimateHandler(
 
   const rules = loadRulePack(2025);
   const estimate = estimateFederalTax(parsed.data, rules);
+  const privacy = await getPrivacyContext(request, auth.householdId);
+  if (!privacy.isUnlocked) {
+    return jsonResponse({
+      privacyMode: "locked",
+      valuesUnlocked: false,
+      estimate: {
+        taxYear: estimate.taxYear,
+        effectiveRate: estimate.effectiveRate,
+        marginalRate: estimate.marginalRate,
+      },
+      disclaimer:
+        "Educational estimates only. Not tax, legal, or investment advice.",
+    });
+  }
   return jsonResponse({
+    privacyMode: "unlocked",
+    valuesUnlocked: true,
     estimate,
     disclaimer:
       "Educational estimates only. Not tax, legal, or investment advice.",
@@ -80,6 +102,10 @@ async function taxStrategiesHandler(
 
   const url = new URL(request.url);
   const wagesOverride = url.searchParams.get("wages");
+  if (wagesOverride !== null) {
+    const locked = await requirePrivacyUnlock(request, auth.householdId);
+    if (locked) return locked;
+  }
 
   const taxInput = TaxYearInputSchema.parse({
     ...(profile?.inputs ?? {
@@ -113,12 +139,26 @@ async function taxStrategiesHandler(
     await taxProfileRepository.upsert(profile);
   }
 
-  return jsonResponse({
-    strategies,
-    taxProfile: profile ?? undefined,
-    disclaimer:
-      "Educational estimates only. Not tax, legal, or investment advice.",
-  });
+  const privacy = await getPrivacyContext(request, auth.householdId);
+  return jsonResponse(
+    privacy.isUnlocked
+      ? {
+          privacyMode: "unlocked",
+          valuesUnlocked: true,
+          strategies,
+          taxProfile: profile ?? undefined,
+          disclaimer:
+            "Educational estimates only. Not tax, legal, or investment advice.",
+        }
+      : {
+          privacyMode: "locked",
+          valuesUnlocked: false,
+          strategies: strategies.map(({ estimatedSavings: _estimatedSavings, ...safe }) => safe),
+          taxProfile: profile ? redactTaxProfile(profile) : undefined,
+          disclaimer:
+            "Educational estimates only. Not tax, legal, or investment advice.",
+        }
+  );
 }
 
 app.http("taxEstimate", {

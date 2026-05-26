@@ -16,7 +16,7 @@ function corsHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, x-household-id, x-privacy-token",
   };
 }
 

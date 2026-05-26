@@ -56,6 +56,12 @@ export function getConfig() {
     keyVaultName: readEnv("KEY_VAULT_NAME"),
     queueName: readEnv("PORTFOLIO_QUEUE_NAME") ?? "portfolio-sync",
     defaultHouseholdId: readEnv("DEFAULT_HOUSEHOLD_ID") ?? "local-household",
+    authPassword: readEnv("AUTH_PASSWORD") ?? "portfolio",
+    authSecret: readEnv("AUTH_SECRET") ?? "portfolio-dev-secret",
+    privacyJwtSecret:
+      readEnv("PRIVACY_JWT_SECRET") ??
+      readEnv("AUTH_SECRET") ??
+      "portfolio-dev-secret",
     apiPublicBaseUrl: readEnv("API_PUBLIC_BASE_URL") ?? defaults.apiPublicBaseUrl,
     webAppUrl: readEnv("WEB_APP_URL") ?? defaults.webAppUrl,
     integrations: {

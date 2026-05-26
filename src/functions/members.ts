@@ -12,9 +12,11 @@ import {
 import { memberRepository } from "../cosmos/repositories/memberRepository.js";
 import { getAuthContext } from "../lib/auth.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
+import { getPrivacyContext, requirePrivacyUnlock } from "../lib/privacy.js";
 import { recomputeTaxProfile } from "../services/householdTaxService.js";
 import { defaultTaxYear } from "@portfolio/contracts";
 import { householdRepository } from "../cosmos/repositories/householdRepository.js";
+import { redactMembers } from "../services/privacyRedact.js";
 
 function resolveHouseholdId(
   request: HttpRequest,
@@ -33,7 +35,16 @@ async function membersListHandler(
     request.params.householdId
   );
   const members = await memberRepository.listByHousehold(householdId);
-  return jsonResponse({ members });
+  const privacy = await getPrivacyContext(request, householdId);
+  return jsonResponse(
+    privacy.isUnlocked
+      ? { privacyMode: "unlocked", valuesUnlocked: true, members }
+      : {
+          privacyMode: "locked",
+          valuesUnlocked: false,
+          members: redactMembers(members),
+        }
+  );
 }
 
 async function memberCreateHandler(
@@ -44,6 +55,8 @@ async function memberCreateHandler(
     request,
     request.params.householdId
   );
+  const locked = await requirePrivacyUnlock(request, householdId);
+  if (locked) return locked;
   const body = await request.json();
   const parsed = CreateMemberRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -65,6 +78,8 @@ async function membersBulkHandler(
     request,
     request.params.householdId
   );
+  const locked = await requirePrivacyUnlock(request, householdId);
+  if (locked) return locked;
   const body = await request.json();
   const parsed = SaveMembersRequestSchema.safeParse(body);
   if (!parsed.success) {
@@ -94,10 +109,21 @@ async function memberByIdHandler(
   if (request.method === "GET") {
     const member = await memberRepository.get(householdId, memberId);
     if (!member) return errorResponse("Member not found", 404);
-    return jsonResponse(member);
+    const privacy = await getPrivacyContext(request, householdId);
+    return jsonResponse(
+      privacy.isUnlocked
+        ? { privacyMode: "unlocked", valuesUnlocked: true, member }
+        : {
+            privacyMode: "locked",
+            valuesUnlocked: false,
+            member: redactMembers([member])[0],
+          }
+    );
   }
 
   if (request.method === "PUT") {
+    const locked = await requirePrivacyUnlock(request, householdId);
+    if (locked) return locked;
     const body = await request.json();
     const parsed = UpdateMemberRequestSchema.safeParse(body);
     if (!parsed.success) {

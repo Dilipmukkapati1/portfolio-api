@@ -7,8 +7,15 @@ import {
 import { transactionRepository } from "../cosmos/repositories/transactionRepository.js";
 import { getAuthContext } from "../lib/auth.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
+import { getPrivacyContext } from "../lib/privacy.js";
 import { SqlUnavailableError } from "../storage/compositeStore.js";
 import { summarizePeriod } from "../services/transactionSummaryService.js";
+import {
+  redactTransaction,
+  redactTransactions,
+  redactTransactionSummary,
+  unlockedTransactionSummary,
+} from "../services/privacyRedact.js";
 
 function mapStorageError(err: unknown): HttpResponseInit | null {
   if (err instanceof SqlUnavailableError) {
@@ -50,7 +57,12 @@ async function transactionsHandler(
         auth.householdId,
         filter
       );
-      return jsonResponse(result);
+      const privacy = await getPrivacyContext(request, auth.householdId);
+      return jsonResponse(
+        privacy.isUnlocked
+          ? { privacyMode: "unlocked", valuesUnlocked: true, ...result }
+          : redactTransactions(result)
+      );
     } catch (err) {
       const mapped = mapStorageError(err);
       if (mapped) return mapped;
@@ -83,7 +95,12 @@ async function transactionsSummaryHandler(
 
   try {
     const summary = await summarizePeriod(auth.householdId, parsed.data);
-    return jsonResponse(summary);
+    const privacy = await getPrivacyContext(request, auth.householdId);
+    return jsonResponse(
+      privacy.isUnlocked
+        ? unlockedTransactionSummary(summary)
+        : redactTransactionSummary(summary)
+    );
   } catch (err) {
     const mapped = mapStorageError(err);
     if (mapped) return mapped;
@@ -113,7 +130,16 @@ async function categorizeHandler(
     categorySource: "user",
     updatedAt: new Date().toISOString(),
   });
-  return jsonResponse(updated);
+  const privacy = await getPrivacyContext(request, auth.householdId);
+  return jsonResponse(
+    privacy.isUnlocked
+      ? { privacyMode: "unlocked", valuesUnlocked: true, transaction: updated }
+      : {
+          privacyMode: "locked",
+          valuesUnlocked: false,
+          transaction: redactTransaction(updated),
+        }
+  );
 }
 
 app.http("transactions", {

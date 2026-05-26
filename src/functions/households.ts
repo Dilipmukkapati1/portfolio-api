@@ -10,17 +10,30 @@ import {
   UpdateHouseholdRequestSchema,
 } from "@portfolio/contracts";
 import { householdRepository } from "../cosmos/repositories/householdRepository.js";
+import { getAuthContext } from "../lib/auth.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
+import { getPrivacyContext } from "../lib/privacy.js";
 import { enrichHousehold } from "../services/householdTaxService.js";
+import { redactHousehold } from "../services/privacyRedact.js";
 
 async function householdsHandler(
   request: HttpRequest,
   _context: InvocationContext
 ): Promise<HttpResponseInit> {
   if (request.method === "GET") {
+    const auth = getAuthContext(request);
+    const privacy = await getPrivacyContext(request, auth.householdId);
     const households = await householdRepository.list();
     const enriched = await Promise.all(households.map((h) => enrichHousehold(h)));
-    return jsonResponse({ households: enriched });
+    return jsonResponse(
+      privacy.isUnlocked
+        ? { privacyMode: "unlocked", valuesUnlocked: true, households: enriched }
+        : {
+            privacyMode: "locked",
+            valuesUnlocked: false,
+            households: enriched.map(redactHousehold),
+          }
+    );
   }
 
   if (request.method === "POST") {
@@ -70,7 +83,17 @@ async function householdByIdHandler(
     if (!household) {
       return errorResponse("Household not found", 404);
     }
-    return jsonResponse(await enrichHousehold(household));
+    const enriched = await enrichHousehold(household);
+    const privacy = await getPrivacyContext(request, householdId);
+    return jsonResponse(
+      privacy.isUnlocked
+        ? { privacyMode: "unlocked", valuesUnlocked: true, household: enriched }
+        : {
+            privacyMode: "locked",
+            valuesUnlocked: false,
+            household: redactHousehold(enriched),
+          }
+    );
   }
 
   if (request.method === "PUT") {

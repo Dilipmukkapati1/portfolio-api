@@ -8,6 +8,7 @@ import { UpsertTaxProfileRequestSchema } from "@portfolio/contracts";
 import { taxProfileRepository } from "../cosmos/repositories/taxProfileRepository.js";
 import { getAuthContext } from "../lib/auth.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
+import { getPrivacyContext, requirePrivacyUnlock } from "../lib/privacy.js";
 import {
   enrichHousehold,
   getOrCreateTaxProfile,
@@ -20,6 +21,7 @@ import {
 } from "@portfolio/contracts";
 import { memberRepository } from "../cosmos/repositories/memberRepository.js";
 import { loadRulePack } from "@portfolio/tax-engine";
+import { redactTaxProfile } from "../services/privacyRedact.js";
 
 function parseTaxYear(request: HttpRequest): number | null {
   const yearParam = request.params.year ?? request.params.taxYear;
@@ -57,7 +59,16 @@ async function taxProfileGetHandler(
     return errorResponse("Tax profile not found", 404);
   }
 
-  return jsonResponse(profile);
+  const privacy = await getPrivacyContext(request, householdId);
+  return jsonResponse(
+    privacy.isUnlocked
+      ? { privacyMode: "unlocked", valuesUnlocked: true, taxProfile: profile }
+      : {
+          privacyMode: "locked",
+          valuesUnlocked: false,
+          taxProfile: redactTaxProfile(profile),
+        }
+  );
 }
 
 async function taxProfilePutHandler(
@@ -72,6 +83,8 @@ async function taxProfilePutHandler(
   if (taxYear === null) {
     return errorResponse("Valid tax year is required", 400);
   }
+  const locked = await requirePrivacyUnlock(request, householdId);
+  if (locked) return locked;
 
   const household = await householdRepository.get(householdId);
   if (!household) {
@@ -108,7 +121,12 @@ async function taxProfilePutHandler(
 
   profile = await taxProfileRepository.upsert(profile);
   const enriched = await enrichHousehold(household);
-  return jsonResponse({ taxProfile: profile, household: enriched });
+  return jsonResponse({
+    privacyMode: "unlocked",
+    valuesUnlocked: true,
+    taxProfile: profile,
+    household: enriched,
+  });
 }
 
 async function taxProfileRecomputeHandler(
@@ -123,6 +141,8 @@ async function taxProfileRecomputeHandler(
   if (taxYear === null) {
     return errorResponse("Valid tax year is required", 400);
   }
+  const locked = await requirePrivacyUnlock(request, householdId);
+  if (locked) return locked;
 
   let filingStatus: import("@portfolio/contracts").FilingStatus | undefined;
   try {
@@ -146,7 +166,12 @@ async function taxProfileRecomputeHandler(
     });
     const household = await householdRepository.get(householdId);
     const enriched = household ? await enrichHousehold(household) : null;
-    return jsonResponse({ taxProfile: profile, household: enriched });
+    return jsonResponse({
+      privacyMode: "unlocked",
+      valuesUnlocked: true,
+      taxProfile: profile,
+      household: enriched,
+    });
   } catch (err) {
     if (err instanceof Error && err.message === "Household not found") {
       return errorResponse(err.message, 404);
