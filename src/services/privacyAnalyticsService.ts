@@ -26,6 +26,36 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function emptyTransactionSummary(): TransactionSummaryResponse {
+  return {
+    totalCredits: 0,
+    totalSpend: 0,
+    spendByCategory: {},
+    transactionCount: 0,
+  };
+}
+
+async function summarizePeriodOrEmpty(
+  householdId: string,
+  range: { startDate?: string; endDate?: string }
+): Promise<{ summary: TransactionSummaryResponse; summaryUnavailable: boolean }> {
+  try {
+    return {
+      summary: await summarizePeriod(householdId, {
+        startDate: range.startDate ?? currentMonthStart(),
+        endDate: range.endDate ?? today(),
+      }),
+      summaryUnavailable: false,
+    };
+  } catch (err) {
+    console.warn(
+      "[privacy-analytics] transaction summary unavailable; returning portfolio analytics without spend aggregates",
+      err
+    );
+    return { summary: emptyTransactionSummary(), summaryUnavailable: true };
+  }
+}
+
 function passiveIncomeAnnual(members: Member[]): number {
   return members.reduce(
     (sum, member) =>
@@ -85,15 +115,13 @@ export async function getDashboardAnalytics(
   householdId: string,
   range: { startDate?: string; endDate?: string } = {}
 ) {
-  const [accounts, holdings, members, summary] = await Promise.all([
+  const [accounts, holdings, members, summaryResult] = await Promise.all([
     accountRepository.listByHousehold(householdId),
     holdingRepository.listByHousehold(householdId),
     memberRepository.listByHousehold(householdId),
-    summarizePeriod(householdId, {
-      startDate: range.startDate ?? currentMonthStart(),
-      endDate: range.endDate ?? today(),
-    }),
+    summarizePeriodOrEmpty(householdId, range),
   ]);
+  const { summary, summaryUnavailable } = summaryResult;
   const freedomScore = computeFreedomScore({ holdings, members, summary });
   const netWorth = accounts.reduce(
     (sum, account) => sum + accountValue(account, holdings),
@@ -111,6 +139,7 @@ export async function getDashboardAnalytics(
       allocation: holdingAllocation(holdings),
       spendByCategoryPercent: redactTransactionSummary(summary).spendByCategoryPercent,
       transactionCount: summary.transactionCount,
+      summaryUnavailable,
       accountSections: accountSections(accounts, holdings),
       freedomScore: {
         privacyMode: "locked" as const,
@@ -124,6 +153,7 @@ export async function getDashboardAnalytics(
       allocation: holdingAllocation(holdings),
       spendByCategoryPercent: redactTransactionSummary(summary).spendByCategoryPercent,
       transactionCount: summary.transactionCount,
+      summaryUnavailable,
       accountSections: accountSections(accounts, holdings),
       freedomScore: {
         privacyMode: "unlocked" as const,
