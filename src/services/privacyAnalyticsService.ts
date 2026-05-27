@@ -1,7 +1,10 @@
 import {
   categorizeInvestment,
+  investmentCategoryLabel,
+  normalizeInvestmentCategory,
   type Account,
   type Holding,
+  type InvestmentCategory,
   type Member,
   type TransactionSummaryResponse,
 } from "@portfolio/contracts";
@@ -214,15 +217,27 @@ function passiveIncomeAnnual(members: Member[]): number {
   );
 }
 
-function holdingAllocation(holdings: Holding[]) {
-  const byCategory = new Map<string, number>();
+function resolveHoldingCategory(holding: Holding): InvestmentCategory {
+  if (holding.category) return normalizeInvestmentCategory(holding.category);
+  return categorizeInvestment({
+    symbol: holding.symbol,
+    description: holding.description,
+  });
+}
+
+export function holdingAllocation(holdings: Holding[]) {
+  const byCategory = new Map<InvestmentCategory, number>();
   for (const holding of holdings) {
-    const key = holding.category ?? "other";
-    byCategory.set(key, (byCategory.get(key) ?? 0) + holdingValue(holding));
+    const category = resolveHoldingCategory(holding);
+    byCategory.set(category, (byCategory.get(category) ?? 0) + holdingValue(holding));
   }
   const total = [...byCategory.values()].reduce((sum, value) => sum + value, 0);
   return [...byCategory.entries()]
-    .map(([id, value]) => ({ id, label: id, percent: percent(value, total) }))
+    .map(([id, value]) => ({
+      id,
+      label: investmentCategoryLabel(id),
+      percent: percent(value, total),
+    }))
     .sort((a, b) => b.percent - a.percent);
 }
 
@@ -274,6 +289,7 @@ export async function getDashboardAnalytics(
     (sum, account) => sum + accountValue(account, holdings),
     0
   );
+  const uninvestedCash = computeUninvestedCash(accounts, holdings);
 
   return {
     accounts,
@@ -288,6 +304,7 @@ export async function getDashboardAnalytics(
       transactionCount: summary.transactionCount,
       summaryUnavailable,
       accountSections: accountSections(accounts, holdings),
+      uninvestedCashPercent: percent(uninvestedCash, netWorth),
       freedomScore: {
         privacyMode: "locked" as const,
         valuesUnlocked: false as const,
@@ -308,7 +325,7 @@ export async function getDashboardAnalytics(
         ...freedomScore,
       },
       netWorth,
-      uninvestedCash: computeUninvestedCash(accounts, holdings),
+      uninvestedCash,
     },
   };
 }

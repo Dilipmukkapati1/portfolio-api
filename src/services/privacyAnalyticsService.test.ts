@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Account, Holding } from "@portfolio/contracts";
-import { computeUninvestedCash } from "./privacyAnalyticsService.js";
+import {
+  computeUninvestedCash,
+  holdingAllocation,
+} from "./privacyAnalyticsService.js";
 
 const now = new Date().toISOString();
 
@@ -34,6 +37,32 @@ function holding(overrides: Partial<Holding>): Holding {
     ...overrides,
   };
 }
+
+describe("holdingAllocation", () => {
+  it("groups holdings by resolved category with readable labels", () => {
+    const holdings = [
+      holding({
+        holdingId: "voo",
+        symbol: "VOO",
+        description: "Vanguard S&P 500 ETF",
+        marketValue: 8_000,
+      }),
+      holding({
+        holdingId: "aapl",
+        symbol: "AAPL",
+        description: "Apple Inc.",
+        marketValue: 2_000,
+      }),
+    ];
+
+    const allocation = holdingAllocation(holdings);
+
+    expect(allocation).toEqual([
+      { id: "etf", label: "ETF", percent: 80 },
+      { id: "stock", label: "Stock", percent: 20 },
+    ]);
+  });
+});
 
 describe("computeUninvestedCash", () => {
   it("sums bank cash and brokerage cash holdings", () => {
