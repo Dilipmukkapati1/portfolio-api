@@ -29,6 +29,7 @@ async function architectDashboardHandler(
   const auth = getAuthContext(request);
   const url = new URL(request.url);
   const timeframe = parseTimeframe(url.searchParams.get("timeframe"));
+  const search = url.searchParams.get("search") ?? undefined;
 
   if (url.searchParams.get("timeframe") && !timeframe) {
     return errorResponse("timeframe must be one of: 1d, 1w, 1m", 400);
@@ -37,6 +38,7 @@ async function architectDashboardHandler(
   try {
     const dashboard = await getArchitectDashboard(auth.householdId, {
       timeframe,
+      search,
     });
     return jsonResponse(dashboard);
   } catch (err) {
@@ -60,7 +62,12 @@ async function architectPlanHandler(
   }
 
   try {
-    await upsertArchitectPlan(auth.householdId, body.data);
+    await upsertArchitectPlan(auth.householdId, {
+      totalCapital: body.data.totalCapital,
+      strategy: body.data.strategy,
+      targets: body.data.targets,
+      addTarget: body.data.addTarget,
+    });
     const dashboard = await getArchitectDashboard(auth.householdId);
     return jsonResponse(dashboard);
   } catch (err) {

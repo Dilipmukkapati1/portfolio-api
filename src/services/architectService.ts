@@ -1,16 +1,34 @@
 import type {
   ArchitectDashboard,
-  ArchitectExecutionAsset,
   ArchitectSectorSlice,
   ArchitectSectorTimeframe,
   ArchitectStrategyAllocation,
 } from "@portfolio/contracts";
+import { holdingRepository } from "../cosmos/repositories/holdingRepository.js";
+import { ensureDefaultArchitectPlan } from "../sql/architectStore.js";
 import {
-  ensureDefaultArchitectPlan,
-  type ArchitectPlanRow,
-} from "../sql/architectStore.js";
+  buildExecutionAssets,
+  computeInvestableTotal,
+  computeStrategyFromHoldings,
+} from "./architectHoldings.js";
 
-const BAR_COLORS = ["purple", "blue", "green", "orange"] as const;
+export const ASSET_CATALOG: Array<{
+  symbol: string;
+  name: string;
+  assetClass: "equity" | "bond" | "cash" | "other";
+}> = [
+  { symbol: "VOO", name: "S&P 500 Index ETF", assetClass: "equity" },
+  { symbol: "VTI", name: "Total Stock Market ETF", assetClass: "equity" },
+  { symbol: "QQQ", name: "Nasdaq-100 ETF", assetClass: "equity" },
+  { symbol: "AAPL", name: "Apple Inc.", assetClass: "equity" },
+  { symbol: "MSFT", name: "Microsoft Corp.", assetClass: "equity" },
+  { symbol: "GOOGL", name: "Alphabet Inc.", assetClass: "equity" },
+  { symbol: "NVDA", name: "NVIDIA Corp.", assetClass: "equity" },
+  { symbol: "BND", name: "Total Bond Market ETF", assetClass: "bond" },
+  { symbol: "AGG", name: "US Aggregate Bond ETF", assetClass: "bond" },
+  { symbol: "SHY", name: "Short-Term Treasury ETF", assetClass: "bond" },
+  { symbol: "VMFXX", name: "Money Market (Cash)", assetClass: "cash" },
+];
 
 /** S&P 500–style sector snapshot for the segment heatmap (weights ≈ index). */
 const SECTOR_BASE: Omit<ArchitectSectorSlice, "livePerfPercent" | "tone">[] = [
@@ -179,51 +197,66 @@ function strategyCenterLabel(strategy: ArchitectStrategyAllocation): string {
   return "Balanced";
 }
 
-function buildExecutionAssets(plan: ArchitectPlanRow): ArchitectExecutionAsset[] {
-  return plan.targets.map((target, index) => {
-    const drift = ((index % 5) - 2) * 0.8;
-    const actualPercent = Math.max(
-      0,
-      Math.min(100, target.plannedPercent + drift)
-    );
-    const fillStatusPercent = Math.min(
-      100,
-      Math.round((actualPercent / Math.max(target.plannedPercent, 1)) * 100)
-    );
-    return {
-      symbol: target.symbol,
-      name: target.name,
-      assetClass: target.assetClass,
-      plannedPercent: target.plannedPercent,
-      actualPercent: Number(actualPercent.toFixed(1)),
-      fillStatusPercent,
-      barColor: BAR_COLORS[index % BAR_COLORS.length],
-    };
-  });
+function searchCatalog(query?: string) {
+  const search = query?.trim().toUpperCase();
+  if (!search) return ASSET_CATALOG;
+  return ASSET_CATALOG.filter(
+    (item) =>
+      item.symbol.includes(search) || item.name.toUpperCase().includes(search)
+  );
+}
+
+function resolveExecutedStrategy(
+  holdings: Awaited<ReturnType<typeof holdingRepository.listByHousehold>>,
+  executionAssets: ReturnType<typeof buildExecutionAssets>
+): ArchitectStrategyAllocation {
+  const fromHoldings = computeStrategyFromHoldings(holdings);
+  const total =
+    fromHoldings.equitiesPercent +
+    fromHoldings.bondsPercent +
+    fromHoldings.cashPercent;
+  if (total > 0) return fromHoldings;
+
+  let equity = 0;
+  let bonds = 0;
+  let cash = 0;
+  for (const asset of executionAssets) {
+    if (asset.assetClass === "bond") bonds += asset.actualPercent;
+    else if (asset.assetClass === "cash") cash += asset.actualPercent;
+    else equity += asset.actualPercent;
+  }
+  const sum = equity + bonds + cash;
+  if (sum <= 0) return { equitiesPercent: 0, bondsPercent: 0, cashPercent: 0 };
+  return {
+    equitiesPercent: Math.round((equity / sum) * 100),
+    bondsPercent: Math.round((bonds / sum) * 100),
+    cashPercent: Math.round((cash / sum) * 100),
+  };
 }
 
 export async function getArchitectDashboard(
   householdId: string,
-  options?: { timeframe?: ArchitectSectorTimeframe }
+  options?: { timeframe?: ArchitectSectorTimeframe; search?: string }
 ): Promise<ArchitectDashboard> {
   const timeframe = options?.timeframe ?? "1d";
   const plan = await ensureDefaultArchitectPlan(householdId);
+  const holdings = await holdingRepository.listByHousehold(householdId);
   const sectors = buildSectorHeatmap(timeframe);
+  const executionAssets = buildExecutionAssets(plan, holdings);
+  const executedStrategy = resolveExecutedStrategy(holdings, executionAssets);
+  const investableTotal = computeInvestableTotal(holdings);
 
   return {
     title: "Portfolio Architect",
-    totalCapital: plan.totalCapital ?? undefined,
+    totalCapital: plan.totalCapital ?? (investableTotal > 0 ? investableTotal : undefined),
     strategy: plan.strategy,
+    executedStrategy,
     strategyCenterLabel: strategyCenterLabel(plan.strategy),
-    executionAssets: buildExecutionAssets(plan),
+    executionAssets,
     sectors,
     sharpeRatio: 1.42,
     efficiencyDescription:
       "Your allocation efficiency is above the household benchmark for this risk profile.",
-    catalog: plan.targets.map((t) => ({
-      symbol: t.symbol,
-      name: t.name,
-      assetClass: t.assetClass,
-    })),
+    catalog: searchCatalog(options?.search),
   };
 }

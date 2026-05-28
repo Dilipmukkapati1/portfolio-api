@@ -175,12 +175,25 @@ export async function upsertArchitectPlan(
     totalCapital?: number;
     strategy?: ArchitectStrategyAllocation;
     targets?: ArchitectTarget[];
+    addTarget?: ArchitectTarget;
   }
 ): Promise<ArchitectPlanRow> {
   const now = new Date().toISOString();
   const current = await ensureDefaultArchitectPlan(householdId);
   const strategy = input.strategy ?? current.strategy;
-  const targets = input.targets ?? current.targets;
+
+  let targets = input.targets ?? current.targets;
+  if (input.addTarget) {
+    const symbol = input.addTarget.symbol.trim().toUpperCase();
+    const merged: ArchitectTarget = {
+      ...input.addTarget,
+      symbol,
+    };
+    targets = [
+      ...targets.filter((t) => t.symbol.toUpperCase() !== symbol),
+      merged,
+    ];
+  }
   const totalCapital = input.totalCapital ?? current.totalCapital ?? null;
 
   await withSqlRetry(async () => {
