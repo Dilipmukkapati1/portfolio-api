@@ -13,6 +13,8 @@ import "./functions/transactions.js";
 import "./functions/holdings.js";
 import "./functions/networth.js";
 import "./functions/analytics.js";
+import "./functions/architect.js";
+import "./functions/architect.js";
 import "./functions/tax.js";
 import "./functions/connectSimplefin.js";
 import "./functions/integrationsStatus.js";
