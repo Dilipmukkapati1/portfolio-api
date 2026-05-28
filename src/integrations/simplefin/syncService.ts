@@ -1,7 +1,10 @@
 import type { Account, Holding, Transaction } from "@portfolio/contracts";
 import { categorizeInvestment } from "@portfolio/contracts";
 import { getDataStore } from "../../storage/index.js";
-import { formatStorageSourceMap } from "../../storage/layout.js";
+import {
+  areTransactionsAvailable,
+  formatStorageSourceMap,
+} from "../../storage/layout.js";
 import { accountRepository } from "../../cosmos/repositories/accountRepository.js";
 import { transactionRepository } from "../../cosmos/repositories/transactionRepository.js";
 import { householdRepository } from "../../cosmos/repositories/householdRepository.js";
@@ -102,6 +105,15 @@ export async function syncSimplefinForHousehold(
   const newAccountIds = new Set<string>();
   let txnCount = 0;
   let holdingCount = 0;
+  const syncTransactions = areTransactionsAvailable(store.sources);
+  if (!syncTransactions) {
+    warnings.push(
+      "Azure SQL is unavailable; account balances and holdings were synced but transactions were skipped."
+    );
+    console.warn(
+      `[portfolio-api] SimpleFIN sync skipping transactions (storage: ${store.sources.entities.transactions})`
+    );
+  }
 
   const firstPass = await processSimplefinResponse(data, {
     householdId,
@@ -110,6 +122,7 @@ export async function syncSimplefinForHousehold(
     existingAccounts,
     syncedAccountIds,
     newAccountIds,
+    syncTransactions,
   });
   txnCount += firstPass.transactions;
   holdingCount += firstPass.holdings;
@@ -133,6 +146,7 @@ export async function syncSimplefinForHousehold(
       syncedAccountIds,
       newAccountIds,
       accountFilter: newAccountIds,
+      syncTransactions,
     });
     txnCount += hardPass.transactions;
     holdingCount += hardPass.holdings;
@@ -188,6 +202,7 @@ type ProcessSimplefinResponseOptions = {
   syncedAccountIds: Set<string>;
   newAccountIds: Set<string>;
   accountFilter?: Set<string>;
+  syncTransactions: boolean;
 };
 
 async function processSimplefinResponse(
@@ -254,12 +269,14 @@ async function processSimplefinResponse(
     };
     await accountRepository.upsert(account);
 
-    txnCount += await syncAccountTransactions(
-      options.householdId,
-      account,
-      sfAccount,
-      options.now
-    );
+    if (options.syncTransactions) {
+      txnCount += await syncAccountTransactions(
+        options.householdId,
+        account,
+        sfAccount,
+        options.now
+      );
+    }
     holdingCount += await syncAccountHoldings(
       options.householdId,
       accountId,
