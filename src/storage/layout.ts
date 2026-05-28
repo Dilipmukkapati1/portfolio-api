@@ -67,3 +67,7 @@ export function formatStorageSourceMap(sources: StorageSourceMap): string {
 export function formatStorageSummary(sources: StorageSourceMap): string {
   return `core=${sources.core} transactions=${sources.transactions}`;
 }
+
+export function areTransactionsAvailable(sources: StorageSourceMap): boolean {
+  return sources.transactions !== "unavailable";
+}
