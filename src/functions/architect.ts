@@ -78,6 +78,13 @@ app.http("architectDashboard", {
   handler: architectDashboardHandler,
 });
 
+app.http("architect", {
+  methods: ["GET"],
+  authLevel: "anonymous",
+  route: "architect",
+  handler: architectDashboardHandler,
+});
+
 app.http("architectPlan", {
   methods: ["PUT"],
   authLevel: "anonymous",
