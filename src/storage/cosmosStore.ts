@@ -9,10 +9,15 @@ import type {
   SaveMembersRequest,
   SyncState,
   TaxProfile,
+  InvestmentPlan,
   UpdateHouseholdRequest,
   UpdateMemberRequest,
 } from "@portfolio/contracts";
-import { resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts";
+import {
+  investmentPlanDocumentId,
+  resolvePrimaryState,
+  taxProfileDocumentId,
+} from "@portfolio/contracts";
 import { randomUUID } from "node:crypto";
 import { getContainerReady } from "../cosmos/bootstrap.js";
 import { unavailableTransactions } from "./compositeStore.js";
@@ -95,6 +100,7 @@ export class CosmosPortfolioStore implements PortfolioStoreCore {
       try {
         await cosmosPortfolioStore.members.deleteAllForHousehold(householdId);
         await cosmosPortfolioStore.taxProfiles.deleteAllForHousehold(householdId);
+        await cosmosPortfolioStore.investmentPlans.delete(householdId);
         await (await getContainerReady("households"))
           .item(householdId, householdId)
           .delete();
@@ -276,6 +282,37 @@ export class CosmosPortfolioStore implements PortfolioStoreCore {
         .fetchAll();
       for (const p of resources) {
         await (await getContainerReady("taxProfiles")).item(p.id, householdId).delete();
+      }
+    },
+  };
+
+  investmentPlans = {
+    get: async (householdId: string): Promise<InvestmentPlan | null> => {
+      const id = investmentPlanDocumentId(householdId);
+      try {
+        const { resource } = await (await getContainerReady("investmentPlans"))
+          .item(id, householdId)
+          .read<InvestmentPlan>();
+        return resource ?? null;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return null;
+        throw err;
+      }
+    },
+
+    upsert: async (plan: InvestmentPlan): Promise<InvestmentPlan> => {
+      const { resource } = await (await getContainerReady("investmentPlans")).items.upsert(plan);
+      return resource as unknown as InvestmentPlan;
+    },
+
+    delete: async (householdId: string): Promise<boolean> => {
+      const id = investmentPlanDocumentId(householdId);
+      try {
+        await (await getContainerReady("investmentPlans")).item(id, householdId).delete();
+        return true;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return false;
+        throw err;
       }
     },
   };

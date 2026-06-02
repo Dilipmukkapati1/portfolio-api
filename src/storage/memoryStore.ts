@@ -5,6 +5,7 @@ import type {
   Holding,
   Household,
   IntegrationToken,
+  InvestmentPlan,
   Member,
   SaveMembersRequest,
   SyncState,
@@ -15,7 +16,7 @@ import type {
   UpdateHouseholdRequest,
   UpdateMemberRequest,
 } from "@portfolio/contracts";
-import { resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts";
+import { investmentPlanDocumentId, resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts";
 import { randomUUID } from "node:crypto";
 import {
   decodeTransactionCursor,
@@ -27,6 +28,7 @@ export interface MemoryStoreSnapshot {
   households: Household[];
   memberData: Record<string, Member[]>;
   taxProfileData: Record<string, TaxProfile[]>;
+  investmentPlanData: Record<string, InvestmentPlan[]>;
   accountData: Record<string, Account[]>;
   transactionData: Record<string, Transaction[]>;
   holdingData: Record<string, Holding[]>;
@@ -57,6 +59,7 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
   private households = new Map<string, Household>();
   private memberData = partitionMap<Member>();
   private taxProfileData = partitionMap<TaxProfile>();
+  private investmentPlanData = partitionMap<InvestmentPlan>();
   private accountData = partitionMap<Account>();
   private transactionData = partitionMap<Transaction>();
   private holdingData = partitionMap<Holding>();
@@ -245,6 +248,26 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
     },
   };
 
+  investmentPlans = {
+    get: async (householdId: string) => {
+      const id = investmentPlanDocumentId(householdId);
+      return getPartition(this.investmentPlanData, householdId).get(id) ?? null;
+    },
+
+    upsert: async (plan: InvestmentPlan) => {
+      getPartition(this.investmentPlanData, plan.householdId).set(plan.id, plan);
+      return plan;
+    },
+
+    delete: async (householdId: string) => {
+      const id = investmentPlanDocumentId(householdId);
+      const part = getPartition(this.investmentPlanData, householdId);
+      if (!part.has(id)) return false;
+      part.delete(id);
+      return true;
+    },
+  };
+
   accounts = {
     listByHousehold: async (householdId: string) =>
       [...getPartition(this.accountData, householdId).values()],
@@ -396,6 +419,7 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
       households: [...this.households.values()],
       memberData: partitionMapToArrays(this.memberData),
       taxProfileData: partitionMapToArrays(this.taxProfileData),
+      investmentPlanData: partitionMapToArrays(this.investmentPlanData),
       accountData: partitionMapToArrays(this.accountData),
       transactionData: partitionMapToArrays(this.transactionData),
       holdingData: partitionMapToArrays(this.holdingData),
@@ -412,6 +436,7 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
     this.households = new Map(snapshot.households.map((h) => [h.householdId, h]));
     this.memberData = arraysToPartitionMap(snapshot.memberData);
     this.taxProfileData = arraysToPartitionMap(snapshot.taxProfileData);
+    this.investmentPlanData = arraysToPartitionMap(snapshot.investmentPlanData ?? {});
     this.accountData = arraysToPartitionMap(snapshot.accountData);
     this.transactionData = arraysToPartitionMap(snapshot.transactionData ?? {});
     this.holdingData = arraysToPartitionMap(snapshot.holdingData);

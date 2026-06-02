@@ -44,6 +44,11 @@ function stubCore(): PortfolioStoreCore {
       delete: async () => false,
       deleteAllForHousehold: async () => {},
     },
+    investmentPlans: {
+      get: async () => null,
+      upsert: async (plan) => plan,
+      delete: async () => false,
+    },
     accounts: {
       listByHousehold: async () => [],
       upsert: async (a) => a,

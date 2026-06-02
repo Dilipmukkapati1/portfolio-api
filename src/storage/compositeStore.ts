@@ -38,6 +38,7 @@ export function createCompositeStore(
     },
     members: core.members,
     taxProfiles: core.taxProfiles,
+    investmentPlans: core.investmentPlans,
     accounts: core.accounts,
     transactions,
     holdings: core.holdings,

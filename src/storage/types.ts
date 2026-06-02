@@ -15,6 +15,7 @@ import type {
   UpdateHouseholdRequest,
   UpdateMemberRequest,
   UpsertTaxProfileRequest,
+  InvestmentPlan,
 } from "@portfolio/contracts";
 import type { StorageSourceMap } from "./layout.js";
 
@@ -52,6 +53,12 @@ export interface PortfolioStoreCore {
     upsert(profile: TaxProfile): Promise<TaxProfile>;
     delete(householdId: string, taxYear: number): Promise<boolean>;
     deleteAllForHousehold(householdId: string): Promise<void>;
+  };
+
+  investmentPlans: {
+    get(householdId: string): Promise<InvestmentPlan | null>;
+    upsert(plan: InvestmentPlan): Promise<InvestmentPlan>;
+    delete(householdId: string): Promise<boolean>;
   };
 
   accounts: {

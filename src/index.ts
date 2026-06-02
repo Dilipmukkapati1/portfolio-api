@@ -13,8 +13,6 @@ import "./functions/transactions.js";
 import "./functions/holdings.js";
 import "./functions/networth.js";
 import "./functions/analytics.js";
-import "./functions/architect.js";
-import "./functions/analyzer.js";
 import "./functions/tax.js";
 import "./functions/connectSimplefin.js";
 import "./functions/integrationsStatus.js";
@@ -26,6 +24,9 @@ import "./functions/queueWorker.js";
 import "./functions/timerDailySync.js";
 import "./functions/timerNightly.js";
 import "./functions/submitBatch.js";
+import "./functions/investmentPlan.js";
+import "./functions/instruments.js";
+import "./functions/projections.js";
 
 if (isCosmosConfigured()) {
   void getDataStore().then((store) =>

@@ -135,6 +135,25 @@ export function instrumentPortfolioStore(
         (householdId) => ({ householdId })
       ),
     },
+    investmentPlans: {
+      get: wrapRead(
+        "investmentPlans",
+        e.investmentPlans,
+        store.investmentPlans.get.bind(store.investmentPlans),
+        (householdId) => ({ householdId })
+      ),
+      upsert: wrapWrite(
+        "investmentPlans",
+        e.investmentPlans,
+        store.investmentPlans.upsert.bind(store.investmentPlans)
+      ),
+      delete: wrapWrite(
+        "investmentPlans",
+        e.investmentPlans,
+        store.investmentPlans.delete.bind(store.investmentPlans),
+        (householdId) => ({ householdId })
+      ),
+    },
     accounts: {
       listByHousehold: wrapRead(
         "accounts",

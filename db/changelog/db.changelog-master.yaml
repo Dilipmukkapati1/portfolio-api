@@ -11,3 +11,9 @@ databaseChangeLog:
   - include:
       file: changes/004-architect-plan.sql
       relativeToChangelogFile: true
+  - include:
+      file: changes/005-architect-categories.sql
+      relativeToChangelogFile: true
+  - include:
+      file: changes/006-drop-architect-tables.sql
+      relativeToChangelogFile: true

@@ -62,6 +62,7 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
       { name: "Accounts", description: "Linked financial accounts" },
       { name: "Transactions", description: "Cash transactions and categorization" },
       { name: "Investments", description: "Holdings and net worth" },
+      { name: "Investment Plan", description: "Target allocation and projections" },
       { name: "Tax", description: "Federal tax estimates and strategies" },
       { name: "Integrations", description: "SimpleFIN and SnapTrade" },
       { name: "Batch", description: "Heavy jobs (Phase 2+)" },
@@ -309,6 +310,90 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
               },
             },
           },
+        },
+      },
+      "/api/investment-plan": {
+        get: {
+          tags: ["Investment Plan"],
+          summary: "Get household investment plan",
+          operationId: "getInvestmentPlan",
+          responses: { "200": { description: "Investment plan document" } },
+        },
+        put: {
+          tags: ["Investment Plan"],
+          summary: "Upsert investment plan instruments",
+          operationId: "upsertInvestmentPlan",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/UpsertInvestmentPlanRequest" },
+              },
+            },
+          },
+          responses: { "200": { description: "Saved plan with summary" } },
+        },
+      },
+      "/api/investment-plan/summary": {
+        get: {
+          tags: ["Investment Plan"],
+          summary: "Plan vs actual summary totals",
+          operationId: "getInvestmentPlanSummary",
+          responses: { "200": { description: "Household plan summary" } },
+        },
+      },
+      "/api/investment-plan/allocation": {
+        get: {
+          tags: ["Investment Plan"],
+          summary: "Plan and actual allocation by asset class",
+          operationId: "getInvestmentPlanAllocation",
+          parameters: [
+            {
+              name: "unit",
+              in: "query",
+              schema: { type: "string", enum: ["dollar", "percent"] },
+            },
+          ],
+          responses: { "200": { description: "Allocation rollup" } },
+        },
+      },
+      "/api/instruments/search": {
+        get: {
+          tags: ["Investment Plan"],
+          summary: "Search instrument catalog",
+          operationId: "searchInstruments",
+          parameters: [
+            { name: "q", in: "query", schema: { type: "string" } },
+            { name: "limit", in: "query", schema: { type: "integer" } },
+          ],
+          responses: { "200": { description: "Search results" } },
+        },
+      },
+      "/api/instruments/{ticker}/profile": {
+        get: {
+          tags: ["Investment Plan"],
+          summary: "Fund profile for ticker",
+          operationId: "getInstrumentProfile",
+          parameters: [
+            { name: "ticker", in: "path", required: true, schema: { type: "string" } },
+          ],
+          responses: { "200": { description: "Fund profile" } },
+        },
+      },
+      "/api/projections/instrument": {
+        post: {
+          tags: ["Investment Plan"],
+          summary: "Project single instrument growth",
+          operationId: "projectInstrument",
+          responses: { "200": { description: "Projection series" } },
+        },
+      },
+      "/api/projections/portfolio": {
+        post: {
+          tags: ["Investment Plan"],
+          summary: "Project portfolio from plan allocations",
+          operationId: "projectPortfolio",
+          responses: { "200": { description: "Projection series" } },
         },
       },
       "/api/networth": {

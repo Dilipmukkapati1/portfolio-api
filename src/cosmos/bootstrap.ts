@@ -8,6 +8,7 @@ export const CONTAINERS = [
   "accounts",
   "holdings",
   "taxProfiles",
+  "investmentPlans",
   "scenarios",
   "projectionRuns",
   "integrationTokens",
@@ -16,6 +17,14 @@ export const CONTAINERS = [
 ] as const;
 
 export type CosmosContainerName = (typeof CONTAINERS)[number];
+
+/** Verified at startup; others are ensured on first read/write. */
+const LAZY_WARMUP_CONTAINERS = new Set<CosmosContainerName>(["investmentPlans"]);
+
+/** Containers that may be auto-created on Azure when missing (new rollouts before terraform apply). */
+const AZURE_AUTO_CREATE_CONTAINERS = new Set<CosmosContainerName>([
+  "investmentPlans",
+]);
 
 let databaseReady = false;
 let databasePromise: Promise<void> | null = null;
@@ -205,6 +214,19 @@ export async function ensureCosmosContainer(name: CosmosContainerName): Promise<
     if (usingAzure()) {
       pending = (async () => {
         await ensureCosmosDatabase();
+        if (await containerExists(name)) {
+          readyContainers.add(name);
+          return;
+        }
+        if (AZURE_AUTO_CREATE_CONTAINERS.has(name)) {
+          console.warn(
+            `[portfolio-api] Cosmos container "${name}" missing in Azure — creating now. ` +
+              `Add to Terraform and run: cd portfolio-infra && make apply-dev`
+          );
+          await createContainerIfNeeded(name);
+          readyContainers.add(name);
+          return;
+        }
         await verifyContainerExists(name);
         readyContainers.add(name);
       })();
@@ -246,15 +268,18 @@ export function warmCosmosContainers(): Promise<void> {
   if (warmupPromise) return warmupPromise;
 
   warmupPromise = (async () => {
+    const startupContainers = CONTAINERS.filter(
+      (name) => !LAZY_WARMUP_CONTAINERS.has(name)
+    );
     const target = usingAzure() ? "Azure (Terraform-provisioned)" : "emulator (serialized create)";
     console.log(
-      `[portfolio-api] Cosmos container warmup starting (${CONTAINERS.length} containers, ${target})...`
+      `[portfolio-api] Cosmos container warmup starting (${startupContainers.length} containers, ${target})...`
     );
     await ensureCosmosDatabase();
     if (usingAzure()) {
-      await Promise.all(CONTAINERS.map((name) => ensureCosmosContainer(name)));
+      await Promise.all(startupContainers.map((name) => ensureCosmosContainer(name)));
     } else {
-      for (const containerName of CONTAINERS) {
+      for (const containerName of startupContainers) {
         await ensureCosmosContainer(containerName);
       }
     }

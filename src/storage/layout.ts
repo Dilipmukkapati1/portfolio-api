@@ -14,6 +14,7 @@ export type StorageSourceMap = {
     accounts: string;
     holdings: string;
     taxProfiles: string;
+    investmentPlans: string;
     integrationTokens: string;
     syncState: string;
     webhookEvents: string;
@@ -50,6 +51,7 @@ export function buildStorageSourceMap(
       accounts: coreEntitySource(core, "accounts"),
       holdings: coreEntitySource(core, "holdings"),
       taxProfiles: coreEntitySource(core, "taxProfiles"),
+      investmentPlans: coreEntitySource(core, "investmentPlans"),
       integrationTokens: coreEntitySource(core, "integrationTokens"),
       syncState: coreEntitySource(core, "syncState"),
       webhookEvents: coreEntitySource(core, "webhookEvents"),
