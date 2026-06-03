@@ -11,17 +11,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: portfolio-api
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Dilipmukkapati1/portfolio-contracts
+          path: portfolio-contracts
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Dilipmukkapati1/portfolio-tax-engine
+          path: portfolio-tax-engine
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
       - name: Build dependencies
+        working-directory: portfolio-api
         run: |
           cd ../portfolio-contracts && npm ci && npm run build
           cd ../portfolio-tax-engine && npm ci && npm run build
+
       - run: npm ci
+        working-directory: portfolio-api
+
       - run: npm run lint
+        working-directory: portfolio-api
+
       - run: npm test
+        working-directory: portfolio-api
+
       - run: npm run build
+        working-directory: portfolio-api
 
   deploy:
     if: github.ref == 'refs/heads/main'
@@ -30,34 +53,68 @@ jobs:
     environment: dev
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: portfolio-api
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Dilipmukkapati1/portfolio-contracts
+          path: portfolio-contracts
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Dilipmukkapati1/portfolio-tax-engine
+          path: portfolio-tax-engine
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: |
+
+      - name: Build and package API
+        working-directory: portfolio-api
+        run: |
           cd ../portfolio-contracts && npm ci && npm run build
           cd ../portfolio-tax-engine && npm ci && npm run build
           npm ci && npm run build
-      - uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Run Liquibase migrations
-        if: ${{ secrets.AZURE_SQL_LIQUIBASE_JDBC_URL != '' }}
-        run: |
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE/db:/liquibase/changelog" \
-            -w /liquibase/changelog \
-            liquibase/liquibase:4.31 \
-            --url="${{ secrets.AZURE_SQL_LIQUIBASE_JDBC_URL }}" \
-            --changelog-file=changelog/db.changelog-master.yaml \
-            update
-      - name: Deploy Function App
-        run: |
           zip -rq api.zip host.json package.json dist node_modules \
             -x "node_modules/azure-functions-core-tools/*" \
             -x "node_modules/azurite/*" \
             -x "node_modules/@types/*" \
             -x "node_modules/typescript/*" \
             -x "node_modules/vitest/*"
+
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Run Liquibase migrations
+        working-directory: portfolio-api
+        env:
+          LIQUIBASE_URL: ${{ secrets.AZURE_SQL_LIQUIBASE_JDBC_URL }}
+          LIQUIBASE_USERNAME: ${{ secrets.AZURE_SQL_LIQUIBASE_USERNAME }}
+          LIQUIBASE_PASSWORD: ${{ secrets.AZURE_SQL_LIQUIBASE_PASSWORD }}
+        run: |
+          if [ -z "$LIQUIBASE_URL" ]; then
+            echo "Skipping Liquibase (AZURE_SQL_LIQUIBASE_JDBC_URL not configured)"
+            exit 0
+          fi
+          if [ -z "$LIQUIBASE_USERNAME" ] || [ -z "$LIQUIBASE_PASSWORD" ]; then
+            echo "Skipping Liquibase (username/password secrets not configured)"
+            exit 0
+          fi
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/portfolio-api/db:/liquibase/changelog" \
+            -w /liquibase/changelog \
+            liquibase/liquibase:4.31 \
+            --url="$LIQUIBASE_URL" \
+            --username="$LIQUIBASE_USERNAME" \
+            --password="$LIQUIBASE_PASSWORD" \
+            --changelog-file=changelog/db.changelog-master.yaml \
+            update
+
+      - name: Deploy Function App
+        working-directory: portfolio-api
+        run: |
           az functionapp deployment source config-zip \
             -g rg-portfolio \
             -n ${{ vars.FUNCTION_APP_NAME }} \
