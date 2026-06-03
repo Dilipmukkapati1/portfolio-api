@@ -181,6 +181,7 @@ function emptyTransactionSummary(): TransactionSummaryResponse {
     totalCredits: 0,
     totalSpend: 0,
     spendByCategory: {},
+    spendByAccount: {},
     transactionCount: 0,
   };
 }

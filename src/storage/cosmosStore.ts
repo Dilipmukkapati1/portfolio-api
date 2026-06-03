@@ -10,10 +10,12 @@ import type {
   SyncState,
   TaxProfile,
   InvestmentPlan,
+  ExpensePlan,
   UpdateHouseholdRequest,
   UpdateMemberRequest,
 } from "@portfolio/contracts";
 import {
+  expensePlanDocumentId,
   investmentPlanDocumentId,
   resolvePrimaryState,
   taxProfileDocumentId,
@@ -101,6 +103,7 @@ export class CosmosPortfolioStore implements PortfolioStoreCore {
         await cosmosPortfolioStore.members.deleteAllForHousehold(householdId);
         await cosmosPortfolioStore.taxProfiles.deleteAllForHousehold(householdId);
         await cosmosPortfolioStore.investmentPlans.delete(householdId);
+        await cosmosPortfolioStore.expensePlans.delete(householdId);
         await (await getContainerReady("households"))
           .item(householdId, householdId)
           .delete();
@@ -309,6 +312,37 @@ export class CosmosPortfolioStore implements PortfolioStoreCore {
       const id = investmentPlanDocumentId(householdId);
       try {
         await (await getContainerReady("investmentPlans")).item(id, householdId).delete();
+        return true;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return false;
+        throw err;
+      }
+    },
+  };
+
+  expensePlans = {
+    get: async (householdId: string): Promise<ExpensePlan | null> => {
+      const id = expensePlanDocumentId(householdId);
+      try {
+        const { resource } = await (await getContainerReady("expensePlans"))
+          .item(id, householdId)
+          .read<ExpensePlan>();
+        return resource ?? null;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return null;
+        throw err;
+      }
+    },
+
+    upsert: async (plan: ExpensePlan): Promise<ExpensePlan> => {
+      const { resource } = await (await getContainerReady("expensePlans")).items.upsert(plan);
+      return resource as unknown as ExpensePlan;
+    },
+
+    delete: async (householdId: string): Promise<boolean> => {
+      const id = expensePlanDocumentId(householdId);
+      try {
+        await (await getContainerReady("expensePlans")).item(id, householdId).delete();
         return true;
       } catch (err: unknown) {
         if ((err as { code?: number }).code === 404) return false;

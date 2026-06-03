@@ -130,24 +130,35 @@ export function redactTransactionSummary(summary: TransactionSummaryResponse) {
     (sum, amount) => sum + Math.max(0, amount),
     0
   );
+  const accountTotal = Object.values(summary.spendByAccount ?? {}).reduce(
+    (sum, amount) => sum + Math.max(0, amount),
+    0
+  );
   const spendByCategoryPercent: Record<string, number> = {};
   for (const [category, amount] of Object.entries(summary.spendByCategory)) {
     spendByCategoryPercent[category] = percent(Math.max(0, amount), spendTotal);
+  }
+  const spendByAccountPercent: Record<string, number> = {};
+  for (const [account, amount] of Object.entries(summary.spendByAccount ?? {})) {
+    spendByAccountPercent[account] = percent(Math.max(0, amount), accountTotal);
   }
   return {
     privacyMode: "locked" as const,
     valuesUnlocked: false as const,
     spendByCategoryPercent,
+    spendByAccountPercent,
     transactionCount: summary.transactionCount,
   };
 }
 
 export function unlockedTransactionSummary(summary: TransactionSummaryResponse) {
+  const redacted = redactTransactionSummary(summary);
   return {
     privacyMode: "unlocked" as const,
     valuesUnlocked: true as const,
     ...summary,
-    spendByCategoryPercent: redactTransactionSummary(summary).spendByCategoryPercent,
+    spendByCategoryPercent: redacted.spendByCategoryPercent,
+    spendByAccountPercent: redacted.spendByAccountPercent,
   };
 }
 

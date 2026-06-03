@@ -18,6 +18,7 @@ const forbiddenKeys = new Set([
   "totalSpend",
   "totalCredits",
   "spendByCategory",
+  "spendByAccount",
 ]);
 
 function collectForbiddenKeys(value: unknown, hits = new Set<string>()) {
@@ -97,6 +98,10 @@ describe("privacy redaction", () => {
         food: 50,
         housing: 150,
       },
+      spendByAccount: {
+        "Chase Checking": 120,
+        "Amex Gold": 80,
+      },
       transactionCount: 4,
     };
 
@@ -106,6 +111,10 @@ describe("privacy redaction", () => {
     expect(redacted.spendByCategoryPercent).toEqual({
       food: 25,
       housing: 75,
+    });
+    expect(redacted.spendByAccountPercent).toEqual({
+      "Chase Checking": 60,
+      "Amex Gold": 40,
     });
     expect(redacted.transactionCount).toBe(4);
   });

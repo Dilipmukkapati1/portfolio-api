@@ -10,6 +10,8 @@ describe("buildOpenApiSpec", () => {
       [
         "/api/accounts",
         "/api/batch/submit",
+        "/api/expense-plan",
+        "/api/expense-plan/mappings/apply",
         "/api/health",
         "/api/holdings",
         "/api/household",

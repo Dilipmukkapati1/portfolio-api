@@ -9,6 +9,7 @@ export const CONTAINERS = [
   "holdings",
   "taxProfiles",
   "investmentPlans",
+  "expensePlans",
   "scenarios",
   "projectionRuns",
   "integrationTokens",
@@ -19,11 +20,15 @@ export const CONTAINERS = [
 export type CosmosContainerName = (typeof CONTAINERS)[number];
 
 /** Verified at startup; others are ensured on first read/write. */
-const LAZY_WARMUP_CONTAINERS = new Set<CosmosContainerName>(["investmentPlans"]);
+const LAZY_WARMUP_CONTAINERS = new Set<CosmosContainerName>([
+  "investmentPlans",
+  "expensePlans",
+]);
 
 /** Containers that may be auto-created on Azure when missing (new rollouts before terraform apply). */
 const AZURE_AUTO_CREATE_CONTAINERS = new Set<CosmosContainerName>([
   "investmentPlans",
+  "expensePlans",
 ]);
 
 let databaseReady = false;

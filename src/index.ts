@@ -25,6 +25,7 @@ import "./functions/timerDailySync.js";
 import "./functions/timerNightly.js";
 import "./functions/submitBatch.js";
 import "./functions/investmentPlan.js";
+import "./functions/expensePlan.js";
 import "./functions/instruments.js";
 import "./functions/projections.js";
 

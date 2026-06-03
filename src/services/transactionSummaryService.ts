@@ -99,10 +99,46 @@ export async function summarizePeriod(
       spendByCategory[row.category] = Number(row.spend ?? 0);
     }
 
+    const accountRequest = pool.request();
+    accountRequest.input("hid", sql.NVarChar(128), householdId);
+    accountRequest.input("start", sql.Date, input.startDate);
+    accountRequest.input("end", sql.Date, input.endDate);
+
+    let accountQuery = `
+      SELECT COALESCE(NULLIF(account_name, ''), account_id) AS account_key,
+             SUM(ABS(amount)) AS spend
+      FROM transactions
+      WHERE household_id = @hid
+        AND pending = 0
+        AND amount < 0
+        AND category NOT IN ('transfer', 'investment')
+        AND txn_date >= @start
+        AND txn_date <= @end`;
+
+    if (input.accountId) {
+      accountRequest.input("aid", sql.NVarChar(128), input.accountId);
+      accountQuery += " AND account_id = @aid";
+    }
+
+    accountQuery +=
+      " GROUP BY COALESCE(NULLIF(account_name, ''), account_id)";
+
+    const accountResult = await accountRequest.query<{
+      account_key: string;
+      spend: number | null;
+    }>(accountQuery);
+
+    const spendByAccount: Record<string, number> = {};
+    for (const row of accountResult.recordset) {
+      if (!row.account_key) continue;
+      spendByAccount[row.account_key] = Number(row.spend ?? 0);
+    }
+
     return {
       totalCredits: Number(totalsRow?.total_credits ?? 0),
       totalSpend: Number(totalsRow?.total_spend ?? 0),
       spendByCategory,
+      spendByAccount,
       transactionCount: Number(totalsRow?.transaction_count ?? 0),
     };
   });

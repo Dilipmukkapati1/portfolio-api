@@ -357,6 +357,43 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
           responses: { "200": { description: "Allocation rollup" } },
         },
       },
+      "/api/expense-plan": {
+        get: {
+          tags: ["Expense Planner"],
+          summary: "Get household expense plan",
+          operationId: "getExpensePlan",
+          responses: { "200": { description: "Expense plan document" } },
+        },
+        put: {
+          tags: ["Expense Planner"],
+          summary: "Upsert expense plan budgets and mapping rules",
+          operationId: "upsertExpensePlan",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/UpsertExpensePlanRequest" },
+              },
+            },
+          },
+          responses: { "200": { description: "Saved expense plan" } },
+        },
+      },
+      "/api/expense-plan/mappings/apply": {
+        post: {
+          tags: ["Expense Planner"],
+          summary: "Apply mapping rules to past transactions",
+          operationId: "applyExpenseMappingRules",
+          requestBody: {
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ApplyMappingRulesRequest" },
+              },
+            },
+          },
+          responses: { "200": { description: "Apply result" } },
+        },
+      },
       "/api/instruments/search": {
         get: {
           tags: ["Investment Plan"],
@@ -800,7 +837,63 @@ export function buildOpenApiSpec(serverUrl: string): OpenAPIV3.Document {
               type: "object",
               additionalProperties: { type: "number" },
             },
+            spendByAccount: {
+              type: "object",
+              additionalProperties: { type: "number" },
+            },
+            spendByCategoryPercent: {
+              type: "object",
+              additionalProperties: { type: "number" },
+            },
+            spendByAccountPercent: {
+              type: "object",
+              additionalProperties: { type: "number" },
+            },
             transactionCount: { type: "integer" },
+          },
+        },
+        UpsertExpensePlanRequest: {
+          type: "object",
+          properties: {
+            categories: {
+              type: "array",
+              items: { $ref: "#/components/schemas/ExpenseCategoryPreference" },
+            },
+            mappingRules: {
+              type: "array",
+              items: { $ref: "#/components/schemas/ExpenseMappingRule" },
+            },
+          },
+        },
+        ApplyMappingRulesRequest: {
+          type: "object",
+          properties: {
+            ruleIds: { type: "array", items: { type: "string" } },
+          },
+        },
+        ExpenseCategoryPreference: {
+          type: "object",
+          required: ["category"],
+          properties: {
+            category: { type: "string", enum: [...transactionCategoryEnum] },
+            label: { type: "string" },
+            hidden: { type: "boolean" },
+            monthlyBudget: { type: "number" },
+          },
+        },
+        ExpenseMappingRule: {
+          type: "object",
+          required: ["id", "matchType", "pattern", "category"],
+          properties: {
+            id: { type: "string" },
+            matchType: {
+              type: "string",
+              enum: ["merchant_contains", "merchant_equals", "type_equals"],
+            },
+            pattern: { type: "string" },
+            category: { type: "string", enum: [...transactionCategoryEnum] },
+            applyToPast: { type: "boolean" },
+            sortOrder: { type: "integer" },
           },
         },
         CategorizeTransactionRequest: {

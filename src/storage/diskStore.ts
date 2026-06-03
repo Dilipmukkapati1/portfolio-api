@@ -83,6 +83,10 @@ export function createDiskPortfolioStore(
       "upsert",
       "delete",
     ]),
+    expensePlans: wrapMutations(inner.expensePlans, persist, [
+      "upsert",
+      "delete",
+    ]),
     accounts: wrapMutations(inner.accounts, persist, ["upsert"]),
     transactions: wrapMutations(inner.transactions, persist, [
       "upsert",

@@ -6,6 +6,7 @@ import type {
   Household,
   IntegrationToken,
   InvestmentPlan,
+  ExpensePlan,
   Member,
   SaveMembersRequest,
   SyncState,
@@ -16,7 +17,7 @@ import type {
   UpdateHouseholdRequest,
   UpdateMemberRequest,
 } from "@portfolio/contracts";
-import { investmentPlanDocumentId, resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts";
+import { expensePlanDocumentId, investmentPlanDocumentId, resolvePrimaryState, taxProfileDocumentId } from "@portfolio/contracts";
 import { randomUUID } from "node:crypto";
 import {
   decodeTransactionCursor,
@@ -29,6 +30,7 @@ export interface MemoryStoreSnapshot {
   memberData: Record<string, Member[]>;
   taxProfileData: Record<string, TaxProfile[]>;
   investmentPlanData: Record<string, InvestmentPlan[]>;
+  expensePlanData: Record<string, ExpensePlan[]>;
   accountData: Record<string, Account[]>;
   transactionData: Record<string, Transaction[]>;
   holdingData: Record<string, Holding[]>;
@@ -60,6 +62,7 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
   private memberData = partitionMap<Member>();
   private taxProfileData = partitionMap<TaxProfile>();
   private investmentPlanData = partitionMap<InvestmentPlan>();
+  private expensePlanData = partitionMap<ExpensePlan>();
   private accountData = partitionMap<Account>();
   private transactionData = partitionMap<Transaction>();
   private holdingData = partitionMap<Holding>();
@@ -117,6 +120,8 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
       this.households.delete(householdId);
       this.memberData.delete(householdId);
       this.taxProfileData.delete(householdId);
+      this.investmentPlanData.delete(householdId);
+      this.expensePlanData.delete(householdId);
       this.accountData.delete(householdId);
       this.transactionData.delete(householdId);
       this.holdingData.delete(householdId);
@@ -262,6 +267,26 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
     delete: async (householdId: string) => {
       const id = investmentPlanDocumentId(householdId);
       const part = getPartition(this.investmentPlanData, householdId);
+      if (!part.has(id)) return false;
+      part.delete(id);
+      return true;
+    },
+  };
+
+  expensePlans = {
+    get: async (householdId: string) => {
+      const id = expensePlanDocumentId(householdId);
+      return getPartition(this.expensePlanData, householdId).get(id) ?? null;
+    },
+
+    upsert: async (plan: ExpensePlan) => {
+      getPartition(this.expensePlanData, plan.householdId).set(plan.id, plan);
+      return plan;
+    },
+
+    delete: async (householdId: string) => {
+      const id = expensePlanDocumentId(householdId);
+      const part = getPartition(this.expensePlanData, householdId);
       if (!part.has(id)) return false;
       part.delete(id);
       return true;
@@ -420,6 +445,7 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
       memberData: partitionMapToArrays(this.memberData),
       taxProfileData: partitionMapToArrays(this.taxProfileData),
       investmentPlanData: partitionMapToArrays(this.investmentPlanData),
+      expensePlanData: partitionMapToArrays(this.expensePlanData),
       accountData: partitionMapToArrays(this.accountData),
       transactionData: partitionMapToArrays(this.transactionData),
       holdingData: partitionMapToArrays(this.holdingData),
@@ -437,6 +463,7 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
     this.memberData = arraysToPartitionMap(snapshot.memberData);
     this.taxProfileData = arraysToPartitionMap(snapshot.taxProfileData);
     this.investmentPlanData = arraysToPartitionMap(snapshot.investmentPlanData ?? {});
+    this.expensePlanData = arraysToPartitionMap(snapshot.expensePlanData ?? {});
     this.accountData = arraysToPartitionMap(snapshot.accountData);
     this.transactionData = arraysToPartitionMap(snapshot.transactionData ?? {});
     this.holdingData = arraysToPartitionMap(snapshot.holdingData);
