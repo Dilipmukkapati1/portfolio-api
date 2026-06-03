@@ -15,7 +15,8 @@ async function instrumentsSearchHandler(
   const limitRaw = request.query.get("limit");
   const limit = limitRaw ? Math.min(Math.max(parseInt(limitRaw, 10) || 8, 1), 25) : 8;
   const provider = getInstrumentDataProvider();
-  return jsonResponse({ results: provider.search(q, limit) });
+  const results = await provider.search(q, limit);
+  return jsonResponse({ results });
 }
 
 async function instrumentProfileHandler(
@@ -27,7 +28,7 @@ async function instrumentProfileHandler(
     return errorResponse("Ticker is required", 400);
   }
   const provider = getInstrumentDataProvider();
-  const profile = provider.getProfile(ticker);
+  const profile = await provider.getProfile(ticker);
   if (!profile) {
     return errorResponse("Instrument not found", 404);
   }

@@ -5,11 +5,7 @@ import type {
   InstrumentSearchResult,
 } from "@portfolio/contracts";
 import { inferAssetClassFromName, tickerFromName } from "@portfolio/contracts";
-
-export interface InstrumentDataProvider {
-  search(q: string, limit: number): InstrumentSearchResult[];
-  getProfile(ticker: string): FundProfile | null;
-}
+import type { InstrumentDataProvider } from "./instrumentDataProvider.types.js";
 
 const CLASS_DEFAULT_EXPENSE_RATIO: Record<AssetClass, number> = {
   "index-funds": 0.0003,
@@ -246,7 +242,7 @@ function profileForTicker(ticker: string, assetClass?: AssetClass): FundProfile 
 }
 
 export class StubInstrumentDataProvider implements InstrumentDataProvider {
-  search(q: string, limit: number): InstrumentSearchResult[] {
+  async search(q: string, limit: number): Promise<InstrumentSearchResult[]> {
     const query = q.trim().toLowerCase();
     if (!query) return EXPLORER_INSTRUMENT_OPTIONS.slice(0, limit);
     return EXPLORER_INSTRUMENT_OPTIONS.filter(
@@ -256,21 +252,15 @@ export class StubInstrumentDataProvider implements InstrumentDataProvider {
     ).slice(0, limit);
   }
 
-  getProfile(ticker: string): FundProfile | null {
+  async getProfile(ticker: string): Promise<FundProfile | null> {
     const normalized = ticker.trim().toUpperCase();
     if (!normalized) return null;
     return profileForTicker(normalized);
   }
 
-  profileFromName(name: string): FundProfile {
+  async profileFromName(name: string): Promise<FundProfile> {
     return profileForTicker(tickerFromName(name), inferAssetClassFromName(name));
   }
 }
 
 export const stubInstrumentDataProvider = new StubInstrumentDataProvider();
-
-export function getInstrumentDataProvider(): InstrumentDataProvider {
-  const kind = process.env.INSTRUMENT_DATA_PROVIDER ?? "stub";
-  if (kind === "stub") return stubInstrumentDataProvider;
-  return stubInstrumentDataProvider;
-}

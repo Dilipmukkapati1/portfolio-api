@@ -34,6 +34,16 @@ npm run db:migrate
 - `STORAGE_MODE=disk` — `.local-data/` only
 - `STORAGE_MODE=memory` — tests
 
+## Market data (instruments)
+
+| Variable | Description |
+| -------- | ----------- |
+| `INSTRUMENT_DATA_PROVIDER` | `stub` (default) or `fmp` |
+| `FMP_API_KEY` | [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs) API key (required when provider is `fmp`) |
+| `FMP_BASE_URL` | Optional; defaults to `https://financialmodelingprep.com/stable` |
+
+With `INSTRUMENT_DATA_PROVIDER=fmp` and a valid `FMP_API_KEY`, `/api/instruments/search` and `/api/instruments/{ticker}/profile` use live quotes, returns, and ETF metadata, with the stub catalog as fallback for search and estimated projection fields.
+
 ## SimpleFIN / SnapTrade / URLs
 
 See previous docs in git history or `local.settings.json.example` for variable tables.

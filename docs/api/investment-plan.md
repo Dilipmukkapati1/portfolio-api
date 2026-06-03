@@ -142,7 +142,14 @@ Server derives `ticker` from `name`, dedupes by ticker (last wins).
 }
 ```
 
-Stub catalog includes VTI, VXUS, VOO, FXAIX, BND, AAPL, MSFT, CASH, etc. Set `INSTRUMENT_DATA_PROVIDER=stub` (default).
+**Providers**
+
+| `INSTRUMENT_DATA_PROVIDER` | Behavior |
+|----------------------------|----------|
+| `stub` (default) | Curated catalog (~13 tickers) with estimated profiles for unknown symbols |
+| `fmp` | [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs) live search, quotes, returns, ETF expense ratios. Requires `FMP_API_KEY`. Falls back to stub when the API is unavailable. |
+
+Optional profile fields when using `fmp`: `name`, `price`, `priceChange1d`, `marketCap`, `volume`, `exchange`, `currency`, `assetType`, `dataSource`, `asOf`.
 
 ---
 

@@ -64,6 +64,12 @@ export function getConfig() {
       "portfolio-dev-secret",
     apiPublicBaseUrl: readEnv("API_PUBLIC_BASE_URL") ?? defaults.apiPublicBaseUrl,
     webAppUrl: readEnv("WEB_APP_URL") ?? defaults.webAppUrl,
+    marketData: {
+      instrumentProvider: readEnv("INSTRUMENT_DATA_PROVIDER") ?? "stub",
+      fmpApiKey: readEnv("FMP_API_KEY"),
+      fmpBaseUrl:
+        readEnv("FMP_BASE_URL") ?? "https://financialmodelingprep.com/stable",
+    },
     integrations: {
       simplefin: {
         /** Claimed SimpleFIN Access URL (optional if using Connections UI). */

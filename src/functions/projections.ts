@@ -9,12 +9,12 @@ import {
   PortfolioProjectionRequestSchema,
   computeInstrumentProjection,
   computePlanProjection,
+  tickerFromName,
   type FundProfile,
   type PlannedInstrument,
 } from "@portfolio/contracts";
 import { jsonResponse, errorResponse } from "../lib/http.js";
 import { getInstrumentDataProvider } from "../services/instrumentDataProvider.js";
-import { stubInstrumentDataProvider } from "../services/stubInstrumentDataProvider.js";
 
 async function instrumentProjectionHandler(
   request: HttpRequest,
@@ -27,7 +27,7 @@ async function instrumentProjectionHandler(
   }
 
   const provider = getInstrumentDataProvider();
-  const profile = provider.getProfile(parsed.data.ticker);
+  const profile = await provider.getProfile(parsed.data.ticker);
   if (!profile) {
     return errorResponse("Instrument not found", 404);
   }
@@ -66,8 +66,35 @@ async function portfolioProjectionHandler(
     })
   );
 
-  const resolveProfile = (item: PlannedInstrument): FundProfile =>
-    stubInstrumentDataProvider.profileFromName(item.name);
+  const provider = getInstrumentDataProvider();
+  const profileByTicker = new Map<string, FundProfile>();
+  await Promise.all(
+    planItems.map(async (item) => {
+      const ticker = tickerFromName(item.name).toUpperCase();
+      if (profileByTicker.has(ticker)) return;
+      const profile = await provider.getProfile(ticker);
+      if (profile) profileByTicker.set(ticker, profile);
+    })
+  );
+
+  const resolveProfile = (item: PlannedInstrument): FundProfile => {
+    const ticker = tickerFromName(item.name).toUpperCase();
+    return (
+      profileByTicker.get(ticker) ?? {
+        ticker,
+        return1y: 0.08,
+        return3y: 0.08,
+        return5y: 0.08,
+        annualizedReturn: 0.08,
+        dividendYield: 0,
+        yearsSinceInception: 8,
+        inceptionLabel: "Est.",
+        expenseRatio: 0,
+        feeKind: "none",
+        dataSource: "estimated",
+      }
+    );
+  };
 
   const projection = computePlanProjection(
     planItems,
