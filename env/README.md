@@ -16,10 +16,11 @@ Set `APP_ENV` to `local`, `development`, or `production`.
 ```bash
 cd ../portfolio-infra && make apply-dev
 cd ../portfolio-api
-npm run azure:local      # Cosmos + SQL settings
-npm run storage:start    # terminal A — Azurite
+npm run start:dev        # Cosmos + SQL + Storage → Azure dev (no Azurite, no migrations)
+# or local Azurite for queues/blob:
+npm run storage:start && npm run start:local   # terminal A + B
+# schema changes only when needed:
 npm run db:migrate
-npm start
 ```
 
 - `npm run cosmos:azure` — Terraform + `az` → `COSMOS_*`, database `portfolio-dev`

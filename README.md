@@ -38,18 +38,26 @@ npm run db:migrate         # first time on empty sqldb-dev
 
 ### Each session
 
-**Terminal 1 — Azurite** (required for timers, queues, `AzureWebJobsStorage`):
+**Option A — local Azurite** (queues/blob emulator; default):
+
+Terminal 1:
 
 ```bash
 cd portfolio-api
 npm run storage:start    # ports 10000–10002; keep running
 ```
 
-**Terminal 2 — API:**
+Terminal 2:
 
 ```bash
 npm run dev:check        # optional preflight
-npm start
+npm run start:local      # or: npm start (alias)
+```
+
+**Option B — Azure Storage dev** (shared Terraform storage account; no Azurite):
+
+```bash
+npm run start:dev        # Cosmos + SQL + Storage from Azure dev (no Azurite, no migrations)
 ```
 
 Verify: `GET http://localhost:7071/api/health` — `sources.transactions` should include `azure-sql` when SQL is reachable.
@@ -63,7 +71,11 @@ Verify: `GET http://localhost:7071/api/health` — `sources.transactions` should
 
 | npm script | Purpose |
 | ---------- | ------- |
+| `start:local` | Azurite `AzureWebJobsStorage` + require Azurite running |
+| `start:dev` | Azure dev: Cosmos + SQL + Storage (no Azurite, no `db:migrate`) |
+| `start` | Alias for `start:local` |
 | `azure:local` | `cosmos:azure` + `sql:azure` |
+| `storage:azure` / `storage:local` | Write `AzureWebJobsStorage` only (used by start scripts) |
 | `cosmos:azure` | Cosmos settings from Terraform + `az` |
 | `sql:azure` | SQL settings from Terraform (no `az` required) |
 | `sql:verify` | Test SQL connectivity (retries auto-pause) |
@@ -95,15 +107,16 @@ Deploy the Function App from your machine (same zip deploy as CI). Resource name
 **Prerequisites:** `az login`, dev stack applied (`cd ../portfolio-infra && make apply-dev`; prod needs `make apply-prod`), Node 20+, `zip`, `terraform`, `jq`. Migrations prefer Docker (`liquibase/liquibase:4.31`); if Docker is not running, the deploy script falls back to local Liquibase (`brew install liquibase`). For Azure SQL from your machine, allow your IP in `portfolio-infra/terraform/terraform.tfvars` (`sql_allow_current_client_ip = true`).
 
 ```bash
-npm run deploy:dev              # dev Function App
+npm run deploy:dev              # dev Function App (code only; no Liquibase)
 npm run deploy:prod             # prod — prompts: type prod to confirm
-npm run deploy -- dev --skip-migrate
+npm run deploy -- dev --skip-migrate   # same as deploy:dev
+npm run deploy -- dev              # run Liquibase before deploy
 npm run deploy -- prod --skip-build
 ```
 
 | Script | Purpose |
 | ------ | ------- |
-| `deploy:dev` | Build, migrate `sqldb-dev`, deploy dev app |
+| `deploy:dev` | Build and deploy dev app (no migrations; run `db:migrate` separately if needed) |
 | `deploy:prod` | Same for prod (`sqldb-prod`) after confirmation |
 | `--skip-migrate` | Skip Liquibase (code-only deploy) |
 | `--skip-build` | Deploy existing `dist/` only |
