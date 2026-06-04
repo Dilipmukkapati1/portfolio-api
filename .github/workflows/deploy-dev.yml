@@ -14,7 +14,6 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: dev
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,8 +77,11 @@ jobs:
 
       - name: Deploy Function App
         working-directory: portfolio-api
+        env:
+          FUNCTION_APP_NAME: ${{ vars.FUNCTION_APP_NAME }}
         run: |
+          app_name="${FUNCTION_APP_NAME:-ppm-dev-func-x32hrp}"
           az functionapp deployment source config-zip \
             -g rg-portfolio \
-            -n ${{ vars.FUNCTION_APP_NAME }} \
+            -n "$app_name" \
             --src api.zip
