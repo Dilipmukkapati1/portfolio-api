@@ -46,7 +46,7 @@ jobs:
         run: |
           cd ../portfolio-contracts && npm ci && npm run build
           cd ../portfolio-tax-engine && npm ci && npm run build
-          npm ci && npm run build
+          cd ../portfolio-api && npm ci && npm run build
           zip -rq api.zip host.json package.json dist node_modules \
             -x "node_modules/azure-functions-core-tools/*" \
             -x "node_modules/azurite/*" \
