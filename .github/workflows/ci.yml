@@ -2,11 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
-# Dev deploy: .github/workflows/deploy-dev.yml (runs on push to main)
+# develop → deploy-dev.yml (Azure dev) | main → deploy-prod.yml (Azure prod)
 
 jobs:
   build:

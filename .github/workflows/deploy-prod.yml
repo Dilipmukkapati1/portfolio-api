@@ -1,14 +1,14 @@
-name: Deploy dev
+name: Deploy prod
 
 on:
   push:
-    branches: [develop]
+    branches: [main]
   workflow_dispatch:
   repository_dispatch:
-    types: [deploy-dev]
+    types: [deploy-prod]
 
 concurrency:
-  group: deploy-dev-api
+  group: deploy-prod-api
   cancel-in-progress: true
 
 env:
@@ -17,7 +17,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: dev
+    environment: prod
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,7 +87,7 @@ jobs:
         env:
           FUNCTION_APP_NAME: ${{ vars.FUNCTION_APP_NAME }}
         run: |
-          app_name="${FUNCTION_APP_NAME:-ppm-dev-func-x32hrp}"
+          app_name="${FUNCTION_APP_NAME:-ppm-prod-func-x32hrp}"
           az functionapp deployment source config-zip \
             -g rg-portfolio \
             -n "$app_name" \
