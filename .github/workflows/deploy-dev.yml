@@ -13,8 +13,8 @@ concurrency:
 
 env:
   API_REF: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.ref || github.ref }}
-  # Shared libraries use the integration branch; API ref may be workflow_dispatch from main.
-  LIB_REF: develop
+  # Shared libraries only publish `main` today; keep in sync with portfolio-contracts.
+  LIB_REF: main
 
 jobs:
   deploy:
