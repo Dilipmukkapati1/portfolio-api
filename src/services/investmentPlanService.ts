@@ -8,7 +8,9 @@ import {
   ASSET_CLASS_ORDER,
   buildAllocationSegments,
   buildHouseholdPlanSummary,
+  buildInstrumentExecutionRollups,
   categorizeInvestment,
+  computePlanExecutionOutlook,
   inferAssetClassFromName,
   mapCategoryToAssetClass,
   normalizeInvestmentCategory,
@@ -147,6 +149,16 @@ export async function buildAllocationRollup(
   const actualTotal = Object.values(actualTotals).reduce((s, v) => s + v, 0);
   const planByClass = sumByClass(plan.instruments, netWorth);
 
+  const instrumentRollups = buildInstrumentExecutionRollups({
+    instruments: plan.instruments,
+    netWorth,
+    actualHoldings: aggregated.map((h) => ({
+      symbol: h.symbol,
+      marketValue: h.marketValue,
+    })),
+    valuesUnlocked,
+  });
+
   return {
     netWorth,
     actualTotalDollars: valuesUnlocked ? actualTotal : null,
@@ -156,6 +168,8 @@ export async function buildAllocationRollup(
       actualTotal,
       valuesUnlocked
     ),
+    instrumentRollups,
+    executionOutlook: computePlanExecutionOutlook(instrumentRollups),
   };
 }
 
