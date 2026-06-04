@@ -6,6 +6,7 @@ import {
 } from "@portfolio/contracts";
 import { transactionRepository } from "../cosmos/repositories/transactionRepository.js";
 import { getAuthContext } from "../lib/auth.js";
+import { mapClientValidationError } from "../lib/errors.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
 import { getPrivacyContext } from "../lib/privacy.js";
 import { SqlUnavailableError } from "../storage/compositeStore.js";
@@ -21,13 +22,7 @@ function mapStorageError(err: unknown): HttpResponseInit | null {
   if (err instanceof SqlUnavailableError) {
     return errorResponse(err.message, 503);
   }
-  if (
-    err instanceof Error &&
-    (err.message.includes("startDate") || err.message.includes("cursor"))
-  ) {
-    return errorResponse(err.message, 400);
-  }
-  return null;
+  return mapClientValidationError(err);
 }
 async function transactionsHandler(
   request: HttpRequest,

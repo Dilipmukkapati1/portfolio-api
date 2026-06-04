@@ -77,6 +77,21 @@ export function isStorageConnectionError(err: unknown): boolean {
   return isStorageError(err, formatRequestError(err));
 }
 
+/** Map thrown validation errors from services (date range, cursors) to HTTP 400. */
+export function mapClientValidationError(err: unknown): HttpResponseInit | null {
+  if (!(err instanceof Error)) return null;
+  const message = err.message;
+  if (
+    message.includes("startDate") ||
+    message.includes("endDate") ||
+    message.includes("cursor") ||
+    message.includes("Date range")
+  ) {
+    return errorResponse(message, 400);
+  }
+  return null;
+}
+
 export function mapRequestError(err: unknown): HttpResponseInit {
   const message = formatRequestError(err);
 

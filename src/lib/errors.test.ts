@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRequestError } from "./errors.js";
+import { formatRequestError, mapClientValidationError } from "./errors.js";
 
 describe("formatRequestError", () => {
   it("uses a standard Error message", () => {
@@ -26,5 +26,14 @@ describe("formatRequestError", () => {
       body: { message: "Resource Not Found" },
     };
     expect(formatRequestError(err)).toBe("Resource Not Found");
+  });
+});
+
+describe("mapClientValidationError", () => {
+  it("maps date range validation to 400", () => {
+    const res = mapClientValidationError(
+      new Error("Date range cannot exceed 366 days")
+    );
+    expect(res?.status).toBe(400);
   });
 });
