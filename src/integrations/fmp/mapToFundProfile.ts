@@ -20,10 +20,16 @@ function pctToDecimal(value: number | undefined): number | undefined {
 
 /** FMP may return ER as percent points (0.03 = 0.03%) or as a decimal (0.0003). */
 function normalizeExpenseRatio(raw: number | undefined): number | undefined {
-  if (raw === undefined || Number.isNaN(raw)) return undefined;
-  if (raw >= 1) return raw / 100;
-  if (raw >= 0.01) return raw / 100;
-  return raw;
+  if (raw === undefined || Number.isNaN(raw) || raw < 0) return undefined;
+
+  let decimal: number;
+  if (raw >= 1) decimal = raw / 100;
+  else if (raw >= 0.01) decimal = raw / 100;
+  else decimal = raw;
+
+  // Expense ratios above 5% are almost certainly bad provider data.
+  if (decimal > 0.05) return undefined;
+  return decimal;
 }
 
 function yearsSince(dateIso: string | undefined): {

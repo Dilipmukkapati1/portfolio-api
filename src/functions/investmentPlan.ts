@@ -16,6 +16,7 @@ import {
   buildAllocationRollup,
   buildSummary,
   dedupePlanInstruments,
+  enrichInstrumentsWithFeeSnapshots,
   getPlan,
   planWarnings,
 } from "../services/investmentPlanService.js";
@@ -50,11 +51,12 @@ async function investmentPlanSummaryHandler(
     request.params.householdId
   );
   const privacy = await getPrivacyContext(request, householdId);
-  const summary = await buildSummary(householdId, privacy.isUnlocked);
+  const { summary, planFees } = await buildSummary(householdId, privacy.isUnlocked);
   return jsonResponse({
     privacyMode: summary.privacyMode,
     valuesUnlocked: summary.valuesUnlocked,
     summary,
+    planFees,
   });
 }
 
@@ -93,13 +95,14 @@ async function investmentPlanPutHandler(
     return errorResponse(parsed.error.message, 400);
   }
 
-  const instruments = dedupePlanInstruments(
+  const deduped = dedupePlanInstruments(
     parsed.data.instruments.map((item, index) => ({
       ...item,
       ticker: tickerFromName(item.name),
       sortOrder: item.sortOrder ?? index,
     }))
   );
+  const instruments = await enrichInstrumentsWithFeeSnapshots(deduped);
 
   const now = new Date().toISOString();
   const plan = await investmentPlanRepository.upsert({
@@ -110,12 +113,13 @@ async function investmentPlanPutHandler(
   });
 
   const privacy = await getPrivacyContext(request, householdId);
-  const summary = await buildSummary(householdId, privacy.isUnlocked);
+  const { summary, planFees } = await buildSummary(householdId, privacy.isUnlocked);
   const warnings = planWarnings(summary);
 
   return jsonResponse({
     plan,
     summary,
+    planFees,
     ...(warnings.length > 0 ? { warnings } : {}),
   });
 }

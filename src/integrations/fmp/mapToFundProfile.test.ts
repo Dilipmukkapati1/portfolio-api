@@ -42,6 +42,16 @@ describe("mapToFundProfile", () => {
     expect(profile.dataSource).toBe("fmp");
     expect(profile.assetType).toBe("etf");
   });
+
+  it("rejects implausibly high expense ratios from provider data", () => {
+    const profile = mapToFundProfile({
+      ticker: "BAD",
+      etf: { symbol: "BAD", expenseRatio: 12 },
+      asOf: "2026-06-04T12:00:00.000Z",
+    });
+
+    expect(profile.expenseRatio).toBe(0.001);
+  });
 });
 
 describe("mapSearchRow", () => {
