@@ -13,8 +13,7 @@ concurrency:
 
 env:
   API_REF: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.ref || github.ref }}
-  # Shared libraries only publish `main` today; keep in sync with portfolio-contracts.
-  LIB_REF: main
+  LIB_REF: develop
 
 jobs:
   deploy:
