@@ -3,6 +3,7 @@ import {
   defaultTaxYear,
   legacyTaxProfileFromHousehold,
   normalizeHousehold,
+  prepareTaxInputForEstimate,
   type Household,
   type Member,
   type TaxProfile,
@@ -41,7 +42,7 @@ export async function recomputeTaxProfile(
   }
   const members = await memberRepository.listByHousehold(householdId);
   const existing = await taxProfileRepository.get(householdId, taxYear);
-  const rules = loadRulePack(2025);
+  const rules = loadRulePack(taxYear);
   const profile = buildTaxProfileFromMembers(household, members, {
     taxYear,
     filingStatus: options?.filingStatus ?? existing?.filingStatus,
@@ -52,7 +53,10 @@ export async function recomputeTaxProfile(
       hsaSingleLimit: rules.hsaSingleLimit,
     },
   });
-  const estimate = estimateFederalTax(profile.inputs, rules);
+  const estimate = estimateFederalTax(
+    prepareTaxInputForEstimate(profile.inputs),
+    rules
+  );
   profile.lastEstimate = estimate;
   profile.lastEstimatedAt = new Date().toISOString();
   return taxProfileRepository.upsert(profile);

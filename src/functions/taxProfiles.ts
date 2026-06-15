@@ -99,7 +99,7 @@ async function taxProfilePutHandler(
 
   const members = await memberRepository.listByHousehold(householdId);
   const existing = await taxProfileRepository.get(householdId, taxYear);
-  const rules = loadRulePack(2025);
+  const rules = loadRulePack(taxYear);
   let profile = buildTaxProfileFromMembers(household, members, {
     taxYear,
     filingStatus: parsed.data.filingStatus ?? existing?.filingStatus,

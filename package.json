@@ -6,7 +6,8 @@
   "type": "module",
   "main": "dist/src/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build:deps && tsc",
+    "build:deps": "npm run build --prefix ../portfolio-contracts && npm run build --prefix ../portfolio-tax-engine",
     "watch": "tsc -w",
     "storage:start": "azurite --silent --location .azurite --skipApiVersionCheck",
     "cosmos:azure": "bash scripts/cosmos-azure-local.sh",

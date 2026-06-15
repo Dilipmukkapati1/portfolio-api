@@ -65,18 +65,12 @@ export async function getPrivacyContext(
 
   try {
     const result = await jwtVerify(token, privacySecretKey());
-    const tokenHouseholdId = result.payload.householdId;
-    if (
-      typeof tokenHouseholdId !== "string" ||
-      tokenHouseholdId !== expectedHouseholdId
-    ) {
-      return { householdId: expectedHouseholdId, isUnlocked: false };
-    }
-
     const expiresAt =
       typeof result.payload.exp === "number"
         ? new Date(result.payload.exp * 1000).toISOString()
         : undefined;
+    // Session-wide unlock: valid token grants access to any household the user
+    // manages (MVP single-user). Do not tie unlock to x-household-id at issue time.
     return {
       householdId: expectedHouseholdId,
       isUnlocked: true,

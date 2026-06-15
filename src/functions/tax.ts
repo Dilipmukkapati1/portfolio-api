@@ -3,6 +3,7 @@ import {
   TaxYearInputSchema,
   defaultTaxYear,
   normalizeHousehold,
+  prepareTaxInputForEstimate,
 } from "@portfolio/contracts";
 import {
   estimateFederalTax,
@@ -61,8 +62,11 @@ async function taxEstimateHandler(
     return errorResponse("No tax profile or request body provided", 400);
   }
 
-  const rules = loadRulePack(2025);
-  const estimate = estimateFederalTax(parsed.data, rules);
+  const rules = loadRulePack(parsed.data.taxYear ?? taxYear);
+  const estimate = estimateFederalTax(
+    prepareTaxInputForEstimate(parsed.data),
+    rules
+  );
   const privacy = await getPrivacyContext(request, auth.householdId);
   if (!privacy.isUnlocked) {
     return jsonResponse({
@@ -94,7 +98,7 @@ async function taxStrategiesHandler(
   const household = await householdRepository.get(auth.householdId);
   const enriched = household ? await enrichHousehold(household) : null;
   const normalized = enriched ? normalizeHousehold(enriched) : null;
-  const taxYear = normalized ? defaultTaxYear(normalized) : 2025;
+  const taxYear = normalized ? defaultTaxYear(normalized) : new Date().getFullYear();
 
   const profile = normalized
     ? await getOrCreateTaxProfile(auth.householdId, taxYear)
@@ -119,7 +123,7 @@ async function taxStrategiesHandler(
       : {}),
   });
 
-  const rules = loadRulePack(2025);
+  const rules = loadRulePack(taxInput.taxYear ?? taxYear);
   const strategies = suggestStrategies(
     {
       householdId: auth.householdId,
