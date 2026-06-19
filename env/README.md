@@ -71,6 +71,13 @@ See previous docs in git history or `local.settings.json.example` for variable t
 | `SNAPTRADE_WEBHOOK_SECRET` | Webhook HMAC secret |
 | `SNAPTRADE_REDIRECT_URL` | OAuth callback (defaults from `API_PUBLIC_BASE_URL`) |
 
+## OpenRouter (Tax Advisor)
+
+| Variable | Description |
+| -------- | ----------- |
+| `OPENROUTER_API_KEY` | [OpenRouter](https://openrouter.ai/keys) API key — local: `local.settings.json`; dev/prod: Key Vault `dev-openrouter-api-key` / `prod-openrouter-api-key` via Terraform app setting |
+| `OPENROUTER_MODEL` | Optional model id; omitted uses `openrouter/auto` |
+
 ## URLs
 
 | Variable | Description |
