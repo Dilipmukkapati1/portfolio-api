@@ -16,7 +16,8 @@ Set `APP_ENV` to `local`, `development`, or `production`.
 ```bash
 cd ../portfolio-infra && make apply-dev
 cd ../portfolio-api
-npm run start:dev        # Cosmos + SQL + Storage → Azure dev (no Azurite, no migrations)
+npm run start:dev        # fast: skips settings sync + build when already configured
+npm run start:dev:sync   # refresh Cosmos/SQL/Storage from Azure, then start
 # or local Azurite for queues/blob:
 npm run storage:start && npm run start:local   # terminal A + B
 # schema changes only when needed:

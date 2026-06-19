@@ -133,7 +133,7 @@ function finalizeStore(
 async function buildStore(): Promise<PortfolioDataStore> {
   if (prefersLocalStorage()) {
     const local = await resolveCoreStore();
-    const useSql = useAzureSqlForTransactions() && (await probeSql());
+    const useSql = useAzureSqlForTransactions() && (await probeSql(1));
     if (useSql) {
       console.log(
         `[portfolio-api] Storage: composite — ${local.mode} (local core) + Azure SQL (transactions)`
@@ -150,7 +150,7 @@ async function buildStore(): Promise<PortfolioDataStore> {
     return finalizeStore(local, "local");
   }
 
-  const sqlOk = useAzureSqlForTransactions() && (await probeSql());
+  const sqlOk = useAzureSqlForTransactions() && (await probeSql(1));
   const core = await resolveCoreStore();
 
   if (sqlOk) {

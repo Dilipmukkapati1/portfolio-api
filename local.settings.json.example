@@ -11,7 +11,7 @@
     "KEY_VAULT_NAME": "",
     "API_PUBLIC_BASE_URL": "http://localhost:7071",
     "WEB_APP_URL": "http://localhost:3000",
-    "DEFAULT_HOUSEHOLD_ID": "local-household",
+    "DEFAULT_HOUSEHOLD_ID": "dev-household",
     "AUTH_PASSWORD": "portfolio",
     "AUTH_SECRET": "portfolio-dev-secret",
     "PRIVACY_JWT_SECRET": "portfolio-dev-privacy-secret",
@@ -26,7 +26,8 @@
     "AZURE_SQL_DATABASE": "sqldb-dev",
     "AZURE_SQL_USER": "ppmadmin",
     "AZURE_SQL_PASSWORD": "RUN npm run sql:azure",
-    "AZURE_SQL_ENCRYPT": "true"
+    "AZURE_SQL_ENCRYPT": "true",
+    "OPENROUTER_API_KEY": ""
   },
   "Host": {
     "CORS": "*"

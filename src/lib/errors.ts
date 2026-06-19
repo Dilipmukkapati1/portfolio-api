@@ -96,7 +96,10 @@ export function mapRequestError(err: unknown): HttpResponseInit {
   const message = formatRequestError(err);
 
   if (message === "Household not found") {
-    return errorResponse(message, 404);
+    return errorResponse(
+      "Household not found. Shared Azure dev data uses household id dev-household — check x-household-id / DEFAULT_HOUSEHOLD_ID.",
+      404
+    );
   }
 
   if (isStorageError(err, message)) {

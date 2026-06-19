@@ -30,7 +30,8 @@ fi
 
 echo ""
 echo "Checklist:"
-echo "  1. npm run azure:local     # once / after infra change"
-echo "  2. npm run db:migrate      # first time on sqldb-dev"
-echo "  3a. npm run storage:start && npm run start:local   # Azurite (terminal A + B)"
-echo "  3b. npm run start:dev      # Azure dev Cosmos/SQL/Storage (no Azurite, no migrations)"
+echo "  1. npm run azure:local        # once / after infra change (cached on later runs)"
+echo "  2. npm run db:migrate         # first time on sqldb-dev, or after schema change"
+echo "  3a. npm run storage:start && npm run start:local   # Azurite"
+echo "  3b. npm run start:dev         # Azure dev (fast: skips rebuild + settings sync when fresh)"
+echo "  3c. npm run start:dev:sync    # force refresh Azure settings, then start"

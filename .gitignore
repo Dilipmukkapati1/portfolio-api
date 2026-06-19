@@ -10,6 +10,7 @@ coverage/
 .azure/
 .azurite/
 .local-data/
+.local/
 .cosmos/
 
 .mssql/

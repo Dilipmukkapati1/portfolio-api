@@ -71,8 +71,10 @@ Verify: `GET http://localhost:7071/api/health` — `sources.transactions` should
 
 | npm script | Purpose |
 | ---------- | ------- |
-| `start:local` | Azurite `AzureWebJobsStorage` + require Azurite running |
-| `start:dev` | Azure dev: Cosmos + SQL + Storage (no Azurite, no `db:migrate`) |
+| `start:dev` | Azure dev: cached settings sync, skip build/migrate when possible, then `func start` |
+| `start:dev:sync` | Force refresh Azure settings, then start |
+| `start:dev:migrate` | Start with Liquibase `db:migrate` (after schema changes) |
+| `start:local` | Azurite storage + require Azurite running (skip build if `dist/` exists) |
 | `start` | Alias for `start:local` |
 | `azure:local` | `cosmos:azure` + `sql:azure` |
 | `storage:azure` / `storage:local` | Write `AzureWebJobsStorage` only (used by start scripts) |

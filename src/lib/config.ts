@@ -42,6 +42,38 @@ export function readHouseholdEnv(
   return readEnv(baseName);
 }
 
+function isCosmosEmulatorEndpoint(endpoint: string): boolean {
+  try {
+    const host = new URL(endpoint).hostname;
+    return host === "localhost" || host === "127.0.0.1";
+  } catch {
+    return endpoint.includes("localhost") || endpoint.includes("127.0.0.1");
+  }
+}
+
+/**
+ * Shared Azure dev Cosmos/SQL stores data under dev-household.
+ * local-household is only for disk/memory or the Cosmos emulator.
+ */
+export function resolveDefaultHouseholdId(): string {
+  const explicit = readEnv("DEFAULT_HOUSEHOLD_ID");
+  const cosmosEndpoint = readEnv("COSMOS_ENDPOINT") ?? "";
+  const storageMode = (readEnv("STORAGE_MODE") ?? "cosmos").toLowerCase();
+  const usesSharedAzureCosmos =
+    storageMode === "cosmos" &&
+    cosmosEndpoint.length > 0 &&
+    !isCosmosEmulatorEndpoint(cosmosEndpoint);
+
+  if (usesSharedAzureCosmos) {
+    if (!explicit || explicit === "local-household") {
+      return "dev-household";
+    }
+    return explicit;
+  }
+
+  return explicit ?? "local-household";
+}
+
 export function getConfig() {
   const appEnv = parseAppEnv();
   const defaults = ENV_DEFAULTS[appEnv];
@@ -55,7 +87,7 @@ export function getConfig() {
       "portfolio-dev",
     keyVaultName: readEnv("KEY_VAULT_NAME"),
     queueName: readEnv("PORTFOLIO_QUEUE_NAME") ?? "portfolio-sync",
-    defaultHouseholdId: readEnv("DEFAULT_HOUSEHOLD_ID") ?? "local-household",
+    defaultHouseholdId: resolveDefaultHouseholdId(),
     authPassword: readEnv("AUTH_PASSWORD") ?? "portfolio",
     authSecret: readEnv("AUTH_SECRET") ?? "portfolio-dev-secret",
     privacyJwtSecret:
@@ -83,6 +115,10 @@ export function getConfig() {
         webhookSecret: readEnv("SNAPTRADE_WEBHOOK_SECRET"),
         redirectUrl: readEnv("SNAPTRADE_REDIRECT_URL"),
       },
+    },
+    openRouter: {
+      apiKey: readEnv("OPENROUTER_API_KEY"),
+      model: readEnv("OPENROUTER_MODEL"),
     },
   };
 }

@@ -27,7 +27,9 @@ if [[ -z "$AZURE_SQL_SERVER" || -z "$AZURE_SQL_DATABASE" || -z "$AZURE_SQL_USER"
 fi
 
 cd "$ROOT"
-npm run build --silent 2>/dev/null || npm run build
+if [[ ! -f dist/src/index.js ]]; then
+  npm run build
+fi
 
 node --input-type=module <<'NODE'
 import { probeSql, resetSqlPoolForTests } from "./dist/src/sql/client.js";

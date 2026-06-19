@@ -7,6 +7,7 @@ import type {
   IntegrationToken,
   InvestmentPlan,
   ExpensePlan,
+  AdvisorConversation,
   Member,
   SaveMembersRequest,
   SyncState,
@@ -31,6 +32,7 @@ export interface MemoryStoreSnapshot {
   taxProfileData: Record<string, TaxProfile[]>;
   investmentPlanData: Record<string, InvestmentPlan[]>;
   expensePlanData: Record<string, ExpensePlan[]>;
+  advisorConversationData: Record<string, AdvisorConversation[]>;
   accountData: Record<string, Account[]>;
   transactionData: Record<string, Transaction[]>;
   holdingData: Record<string, Holding[]>;
@@ -63,6 +65,7 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
   private taxProfileData = partitionMap<TaxProfile>();
   private investmentPlanData = partitionMap<InvestmentPlan>();
   private expensePlanData = partitionMap<ExpensePlan>();
+  private advisorConversationData = partitionMap<AdvisorConversation>();
   private accountData = partitionMap<Account>();
   private transactionData = partitionMap<Transaction>();
   private holdingData = partitionMap<Holding>();
@@ -122,6 +125,7 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
       this.taxProfileData.delete(householdId);
       this.investmentPlanData.delete(householdId);
       this.expensePlanData.delete(householdId);
+      this.advisorConversationData.delete(householdId);
       this.accountData.delete(householdId);
       this.transactionData.delete(householdId);
       this.holdingData.delete(householdId);
@@ -293,6 +297,36 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
     },
   };
 
+  advisorConversations = {
+    listByHousehold: async (householdId: string) =>
+      [...getPartition(this.advisorConversationData, householdId).values()].sort(
+        (a, b) => b.updatedAt.localeCompare(a.updatedAt)
+      ),
+
+    get: async (householdId: string, conversationId: string) =>
+      getPartition(this.advisorConversationData, householdId).get(conversationId) ??
+      null,
+
+    upsert: async (conversation: AdvisorConversation) => {
+      getPartition(this.advisorConversationData, conversation.householdId).set(
+        conversation.id,
+        conversation
+      );
+      return conversation;
+    },
+
+    delete: async (householdId: string, conversationId: string) => {
+      const part = getPartition(this.advisorConversationData, householdId);
+      if (!part.has(conversationId)) return false;
+      part.delete(conversationId);
+      return true;
+    },
+
+    deleteAllForHousehold: async (householdId: string) => {
+      this.advisorConversationData.delete(householdId);
+    },
+  };
+
   accounts = {
     listByHousehold: async (householdId: string) =>
       [...getPartition(this.accountData, householdId).values()],
@@ -446,6 +480,7 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
       taxProfileData: partitionMapToArrays(this.taxProfileData),
       investmentPlanData: partitionMapToArrays(this.investmentPlanData),
       expensePlanData: partitionMapToArrays(this.expensePlanData),
+      advisorConversationData: partitionMapToArrays(this.advisorConversationData),
       accountData: partitionMapToArrays(this.accountData),
       transactionData: partitionMapToArrays(this.transactionData),
       holdingData: partitionMapToArrays(this.holdingData),
@@ -464,6 +499,9 @@ export class MemoryPortfolioStore implements PortfolioStoreCore {
     this.taxProfileData = arraysToPartitionMap(snapshot.taxProfileData);
     this.investmentPlanData = arraysToPartitionMap(snapshot.investmentPlanData ?? {});
     this.expensePlanData = arraysToPartitionMap(snapshot.expensePlanData ?? {});
+    this.advisorConversationData = arraysToPartitionMap(
+      snapshot.advisorConversationData ?? {}
+    );
     this.accountData = arraysToPartitionMap(snapshot.accountData);
     this.transactionData = arraysToPartitionMap(snapshot.transactionData ?? {});
     this.holdingData = arraysToPartitionMap(snapshot.holdingData);

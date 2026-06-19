@@ -173,6 +173,37 @@ export function instrumentPortfolioStore(
         (householdId) => ({ householdId })
       ),
     },
+    advisorConversations: {
+      listByHousehold: wrapRead(
+        "advisorConversations",
+        e.advisorConversations,
+        store.advisorConversations.listByHousehold.bind(store.advisorConversations),
+        (householdId) => ({ householdId })
+      ),
+      get: wrapRead(
+        "advisorConversations",
+        e.advisorConversations,
+        store.advisorConversations.get.bind(store.advisorConversations),
+        (householdId, conversationId) => ({ householdId, conversationId })
+      ),
+      upsert: wrapWrite(
+        "advisorConversations",
+        e.advisorConversations,
+        store.advisorConversations.upsert.bind(store.advisorConversations)
+      ),
+      delete: wrapWrite(
+        "advisorConversations",
+        e.advisorConversations,
+        store.advisorConversations.delete.bind(store.advisorConversations),
+        (householdId, conversationId) => ({ householdId, conversationId })
+      ),
+      deleteAllForHousehold: wrapWrite(
+        "advisorConversations",
+        e.advisorConversations,
+        store.advisorConversations.deleteAllForHousehold.bind(store.advisorConversations),
+        (householdId) => ({ householdId })
+      ),
+    },
     accounts: {
       listByHousehold: wrapRead(
         "accounts",

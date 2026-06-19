@@ -87,6 +87,11 @@ export function createDiskPortfolioStore(
       "upsert",
       "delete",
     ]),
+    advisorConversations: wrapMutations(inner.advisorConversations, persist, [
+      "upsert",
+      "delete",
+      "deleteAllForHousehold",
+    ]),
     accounts: wrapMutations(inner.accounts, persist, ["upsert"]),
     transactions: wrapMutations(inner.transactions, persist, [
       "upsert",

@@ -28,6 +28,7 @@ import "./functions/investmentPlan.js";
 import "./functions/expensePlan.js";
 import "./functions/instruments.js";
 import "./functions/projections.js";
+import "./functions/advisor.js";
 
 if (isCosmosConfigured()) {
   void getDataStore().then((store) =>

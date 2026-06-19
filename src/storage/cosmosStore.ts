@@ -11,6 +11,7 @@ import type {
   TaxProfile,
   InvestmentPlan,
   ExpensePlan,
+  AdvisorConversation,
   UpdateHouseholdRequest,
   UpdateMemberRequest,
 } from "@portfolio/contracts";
@@ -348,6 +349,62 @@ export class CosmosPortfolioStore implements PortfolioStoreCore {
         if ((err as { code?: number }).code === 404) return false;
         throw err;
       }
+    },
+  };
+
+  advisorConversations = {
+    listByHousehold: async (householdId: string): Promise<AdvisorConversation[]> => {
+      const { resources } = await (await getContainerReady("advisorConversations"))
+        .items.query<AdvisorConversation>({
+          query: "SELECT * FROM c WHERE c.householdId = @hid ORDER BY c.updatedAt DESC",
+          parameters: [{ name: "@hid", value: householdId }],
+        })
+        .fetchAll();
+      return resources ?? [];
+    },
+
+    get: async (
+      householdId: string,
+      conversationId: string
+    ): Promise<AdvisorConversation | null> => {
+      try {
+        const { resource } = await (await getContainerReady("advisorConversations"))
+          .item(conversationId, householdId)
+          .read<AdvisorConversation>();
+        return resource ?? null;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return null;
+        throw err;
+      }
+    },
+
+    upsert: async (conversation: AdvisorConversation): Promise<AdvisorConversation> => {
+      const { resource } = await (await getContainerReady("advisorConversations")).items.upsert(
+        conversation
+      );
+      return resource as unknown as AdvisorConversation;
+    },
+
+    delete: async (householdId: string, conversationId: string): Promise<boolean> => {
+      try {
+        await (await getContainerReady("advisorConversations"))
+          .item(conversationId, householdId)
+          .delete();
+        return true;
+      } catch (err: unknown) {
+        if ((err as { code?: number }).code === 404) return false;
+        throw err;
+      }
+    },
+
+    deleteAllForHousehold: async (householdId: string): Promise<void> => {
+      const items = await cosmosPortfolioStore.advisorConversations.listByHousehold(
+        householdId
+      );
+      const container = await getContainerReady("advisorConversations");
+      await Promise.all(
+        items.map((c) => container.item(c.id, householdId).delete())
+      );
     },
   };
 

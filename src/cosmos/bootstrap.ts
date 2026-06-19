@@ -10,6 +10,7 @@ export const CONTAINERS = [
   "taxProfiles",
   "investmentPlans",
   "expensePlans",
+  "advisorConversations",
   "scenarios",
   "projectionRuns",
   "integrationTokens",
@@ -23,12 +24,14 @@ export type CosmosContainerName = (typeof CONTAINERS)[number];
 const LAZY_WARMUP_CONTAINERS = new Set<CosmosContainerName>([
   "investmentPlans",
   "expensePlans",
+  "advisorConversations",
 ]);
 
 /** Containers that may be auto-created on Azure when missing (new rollouts before terraform apply). */
 const AZURE_AUTO_CREATE_CONTAINERS = new Set<CosmosContainerName>([
   "investmentPlans",
   "expensePlans",
+  "advisorConversations",
 ]);
 
 let databaseReady = false;
@@ -273,6 +276,14 @@ export function warmCosmosContainers(): Promise<void> {
   if (warmupPromise) return warmupPromise;
 
   warmupPromise = (async () => {
+    if (usingAzure() && process.env.COSMOS_WARMUP !== "all") {
+      await ensureCosmosReady();
+      console.log(
+        "[portfolio-api] Cosmos database verified (container warmup deferred — set COSMOS_WARMUP=all to verify all at startup)"
+      );
+      return;
+    }
+
     const startupContainers = CONTAINERS.filter(
       (name) => !LAZY_WARMUP_CONTAINERS.has(name)
     );

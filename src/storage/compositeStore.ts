@@ -40,6 +40,7 @@ export function createCompositeStore(
     taxProfiles: core.taxProfiles,
     investmentPlans: core.investmentPlans,
     expensePlans: core.expensePlans,
+    advisorConversations: core.advisorConversations,
     accounts: core.accounts,
     transactions,
     holdings: core.holdings,
