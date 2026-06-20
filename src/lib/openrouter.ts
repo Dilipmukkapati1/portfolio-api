@@ -30,6 +30,7 @@ export interface OpenRouterChatOptions {
   messages: OpenRouterMessage[];
   maxTokens?: number;
   temperature?: number;
+  model?: string;
 }
 
 export interface OpenRouterChatResult {
@@ -104,7 +105,7 @@ export async function openRouterChatComplete(
     throw new OpenRouterNotConfiguredError();
   }
 
-  const model = openRouter.model || OPENROUTER_AUTO_MODEL;
+  const model = options.model ?? openRouter.model ?? OPENROUTER_AUTO_MODEL;
   const referer = openRouterReferer(webAppUrl);
 
   const body = {
@@ -161,4 +162,44 @@ export async function openRouterChatComplete(
   }
 
   return { content, model: data.model ?? model };
+}
+
+function stripJsonFence(text: string): string {
+  const trimmed = text.trim();
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch?.[1]) return fenceMatch[1].trim();
+  return trimmed;
+}
+
+/** Pull the first JSON object from model output (handles prose wrappers). */
+export function extractJsonObjectFromText(text: string): string {
+  const unfenced = stripJsonFence(text);
+  const start = unfenced.indexOf("{");
+  const end = unfenced.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return unfenced.slice(start, end + 1);
+  }
+  return unfenced;
+}
+
+export async function openRouterExtractJson<T>(
+  options: Omit<OpenRouterChatOptions, "maxTokens" | "temperature"> & {
+    parse: (value: unknown) => T;
+  }
+): Promise<T> {
+  const { openRouter } = getConfig();
+  const result = await openRouterChatComplete({
+    ...options,
+    model: options.model ?? openRouter.extractionModel,
+    maxTokens: 600,
+    temperature: 0,
+  });
+  const raw = extractJsonObjectFromText(result.content);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Extraction model returned invalid JSON: ${raw.slice(0, 200)}`);
+  }
+  return options.parse(parsed);
 }

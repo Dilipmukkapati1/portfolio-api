@@ -119,6 +119,8 @@ export function getConfig() {
     openRouter: {
       apiKey: readEnv("OPENROUTER_API_KEY"),
       model: readEnv("OPENROUTER_MODEL"),
+      extractionModel:
+        readEnv("OPENROUTER_EXTRACTION_MODEL") ?? "google/gemini-2.0-flash-001",
     },
   };
 }

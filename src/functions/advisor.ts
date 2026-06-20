@@ -216,21 +216,38 @@ async function chatHandler(
       content: m.content,
     }));
 
-  let assistantContent: string;
   try {
     const pageContextPrefix = includePageSnapshot
       ? buildPageContextUserPrefix(pageContext)
       : undefined;
 
-    const result = await openRouterChatComplete({
-      messages: buildAdvisorMessages({
-        systemPrompt,
-        history,
-        userMessage: userMessage.content,
-        pageContextPrefix,
-      }),
+    const advisorMessages = buildAdvisorMessages({
+      systemPrompt,
+      history,
+      userMessage: userMessage.content,
+      pageContextPrefix,
     });
-    assistantContent = result.content;
+
+    const advisorResult = await openRouterChatComplete({ messages: advisorMessages });
+
+    const assistantMessage: AdvisorMessage = {
+      id: randomUUID(),
+      role: "assistant",
+      content: advisorResult.content,
+      createdAt: new Date().toISOString(),
+    };
+    conversation.messages.push(assistantMessage);
+    conversation.updatedAt = assistantMessage.createdAt;
+
+    await advisorConversationRepository.upsert(conversation);
+
+    return jsonResponse({
+      conversationId: conversation.id,
+      message: assistantMessage,
+      disclaimer: ADVISOR_DISCLAIMER,
+      privacyMode: privacy.isUnlocked ? "unlocked" : "locked",
+      valuesUnlocked: privacy.isUnlocked,
+    });
   } catch (err) {
     if (err instanceof OpenRouterNotConfiguredError) {
       return errorResponse(
@@ -241,25 +258,6 @@ async function chatHandler(
     const message = err instanceof Error ? err.message : "Advisor request failed";
     return errorResponse(message, 502);
   }
-
-  const assistantMessage: AdvisorMessage = {
-    id: randomUUID(),
-    role: "assistant",
-    content: assistantContent,
-    createdAt: new Date().toISOString(),
-  };
-  conversation.messages.push(assistantMessage);
-  conversation.updatedAt = assistantMessage.createdAt;
-
-  await advisorConversationRepository.upsert(conversation);
-
-  return jsonResponse({
-    conversationId: conversation.id,
-    message: assistantMessage,
-    disclaimer: ADVISOR_DISCLAIMER,
-    privacyMode: privacy.isUnlocked ? "unlocked" : "locked",
-    valuesUnlocked: privacy.isUnlocked,
-  });
 }
 
 app.http("advisorConversationsList", {

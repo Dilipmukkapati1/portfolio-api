@@ -8,6 +8,7 @@ import { getAuthContext } from "../lib/auth.js";
 import { jsonResponse, errorResponse } from "../lib/http.js";
 import { getPrivacyContext } from "../lib/privacy.js";
 import { enrichHousehold } from "../services/householdTaxService.js";
+import { ensureDefaultHousehold } from "../services/ensureDefaultHousehold.js";
 import { redactHousehold } from "../services/privacyRedact.js";
 
 async function householdHandler(
@@ -17,11 +18,7 @@ async function householdHandler(
   const auth = getAuthContext(request);
 
   if (request.method === "GET") {
-    const household = await householdRepository.get(auth.householdId);
-    if (!household) {
-      return errorResponse("Household not found", 404);
-    }
-    const enriched = await enrichHousehold(household);
+    const enriched = await ensureDefaultHousehold(auth.householdId);
     const privacy = await getPrivacyContext(request, auth.householdId);
     return jsonResponse(
       privacy.isUnlocked
