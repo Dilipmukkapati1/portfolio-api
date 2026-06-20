@@ -18,6 +18,7 @@ export interface SaveHouseholdBundleInput {
   persona?: Persona;
   defaultTaxYear?: number;
   filingStatus?: FilingStatus;
+  liquidCashSnapshot?: number;
   members?: Member[];
   settings?: Partial<HouseholdSettings>;
 }
@@ -59,6 +60,9 @@ export async function saveHouseholdBundle(
   }
   if (input.persona !== undefined) {
     householdUpdate.persona = input.persona;
+  }
+  if (input.liquidCashSnapshot !== undefined) {
+    householdUpdate.liquidCashSnapshot = input.liquidCashSnapshot;
   }
   if (input.defaultTaxYear !== undefined || input.settings) {
     householdUpdate.settings = {

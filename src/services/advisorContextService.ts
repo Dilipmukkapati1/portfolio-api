@@ -159,6 +159,11 @@ export async function buildAdvisorHouseholdContext(
       state: normalized.primaryState ?? normalized.state,
       filingStatus: normalized.filingStatus,
       dependents: normalized.dependents,
+      liquidCashSnapshot: isUnlocked
+        ? normalized.liquidCashSnapshot
+        : normalized.liquidCashSnapshot != null
+          ? "[redacted]"
+          : undefined,
       taxYear,
     },
     members: memberSummary,

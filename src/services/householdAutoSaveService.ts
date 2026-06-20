@@ -2,6 +2,7 @@ import {
   countDependents,
   defaultTaxYear,
   enrichPatchWithInferredMembers,
+  inferLiquidCashFromMessage,
   inferMemberPatchesFromMessage,
   mergeMemberPatches,
   normalizeHousehold,
@@ -27,7 +28,7 @@ import { ensureDefaultHousehold } from "./ensureDefaultHousehold.js";
 import { saveHouseholdBundle } from "./householdWriteService.js";
 
 const PROFILE_SIGNAL =
-  /\b(moved to|live in|state|salary|wage|income|earn|make \$|contribute|401\s*\(?k|403\s*\(?b|hsa|ira|roth|filing|married|single|dependent|child|kid|baby|spouse|persona|household|maxed|max out|display name|tax year)\b/i;
+  /\b(moved to|live in|state|salary|wage|income|earn|make \$|contribute|401\s*\(?k|403\s*\(?b|hsa|ira|roth|filing|married|single|dependent|child|kid|baby|spouse|persona|household|maxed|max out|display name|tax year|bonus|dcfsa|dependent care|employer match|liquid cash|cash income)\b/i;
 
 const US_STATE_NAMES =
   /\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)\b/i;
@@ -55,6 +56,7 @@ function buildCompactSnapshot(
     persona: normalized.persona,
     defaultTaxYear: defaultTaxYear(normalized),
     filingStatus,
+    liquidCashSnapshot: normalized.liquidCashSnapshot,
     members: members.map((m) => ({
       id: m.id,
       name: m.name,
@@ -78,6 +80,7 @@ function patchHasUpdates(patch: HouseholdAutoSavePatch): boolean {
   if (patch.persona != null) return true;
   if (patch.filingStatus != null) return true;
   if (patch.defaultTaxYear != null) return true;
+  if (patch.liquidCashSnapshot != null) return true;
   if (patch.members && patch.members.length > 0) return true;
   return false;
 }
@@ -150,6 +153,20 @@ function diffPatchChanges(
       label: "Tax year",
       before: String(defaultTaxYear(b)),
       after: String(defaultTaxYear(a)),
+    });
+  }
+  if (
+    patch.liquidCashSnapshot != null &&
+    b.liquidCashSnapshot !== a.liquidCashSnapshot
+  ) {
+    changes.push({
+      field: "liquidCashSnapshot",
+      label: "Liquid cash",
+      before:
+        b.liquidCashSnapshot != null
+          ? `$${formatValue(b.liquidCashSnapshot)}`
+          : undefined,
+      after: `$${formatValue(a.liquidCashSnapshot)}`,
     });
   }
 
@@ -265,6 +282,9 @@ export async function tryAutoSaveHouseholdFromChat(options: {
                 retirement401kLimit: rules.retirement401kLimit ?? 23500,
                 hsaSingleLimit: rules.hsaSingleLimit ?? 4300,
                 hsaFamilyLimit: rules.hsaFamilyLimit ?? 8550,
+                fsaHealthLimit: rules.fsaHealthLimit ?? 3300,
+                fsaDependentCareLimit: rules.fsaDependentCareLimit ?? 5000,
+                fsaDependentCareLimitMfs: rules.fsaDependentCareLimitMfs ?? 2500,
               },
             }),
           },
@@ -291,6 +311,11 @@ export async function tryAutoSaveHouseholdFromChat(options: {
   }
 
   patch = enrichPatchWithInferredMembers(patch, inferredMemberPatches);
+
+  const inferredCash = inferLiquidCashFromMessage(options.userMessage);
+  if (inferredCash != null && patch.liquidCashSnapshot == null) {
+    patch = { ...patch, liquidCashSnapshot: inferredCash };
+  }
 
   if (llmExtractionFailed && inferredMemberPatches.length === 0) {
     return {
@@ -323,6 +348,9 @@ export async function tryAutoSaveHouseholdFromChat(options: {
       retirement401kLimit: rules.retirement401kLimit,
       hsaSingleLimit: rules.hsaSingleLimit,
       hsaFamilyLimit: rules.hsaFamilyLimit,
+      fsaHealthLimit: rules.fsaHealthLimit,
+      fsaDependentCareLimit: rules.fsaDependentCareLimit,
+      fsaDependentCareLimitMfs: rules.fsaDependentCareLimitMfs,
     },
   };
 
@@ -347,6 +375,7 @@ export async function tryAutoSaveHouseholdFromChat(options: {
       persona: patch.persona ?? undefined,
       defaultTaxYear: patch.defaultTaxYear ?? undefined,
       filingStatus: patch.filingStatus ?? undefined,
+      liquidCashSnapshot: patch.liquidCashSnapshot ?? undefined,
       members: patch.members ? mergedMembers : undefined,
     });
 

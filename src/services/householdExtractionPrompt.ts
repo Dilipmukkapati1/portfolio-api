@@ -7,6 +7,9 @@ export function buildHouseholdExtractionSystemPrompt(options: {
     retirement401kLimit: number;
     hsaSingleLimit: number;
     hsaFamilyLimit: number;
+    fsaHealthLimit: number;
+    fsaDependentCareLimit: number;
+    fsaDependentCareLimitMfs: number;
   };
 }): string {
   const { snapshotJson, taxYear, limits } = options;
@@ -19,20 +22,36 @@ ${snapshotJson}
 
 Tax year: ${taxYear}
 Contribution limits (${taxYear}):
-- 401(k)/403(b)/traditional IRA (per member, pre-tax cap reference): $${limits.retirement401kLimit}
-- HSA single: $${limits.hsaSingleLimit}
+
+Household caps (shared across members — amounts must sum to at most the cap):
 - HSA family (MFJ or dependents): $${limits.hsaFamilyLimit}
+- Dependent care FSA: $${limits.fsaDependentCareLimit} ($${limits.fsaDependentCareLimitMfs} if MFS)
+
+Per-member caps:
+- 401(k)/403(b)/traditional IRA (each person): $${limits.retirement401kLimit}
+- HSA single (self-only coverage): $${limits.hsaSingleLimit}
+- Health FSA (each person): $${limits.fsaHealthLimit}
 
 Income types (store annual amounts; use period "monthly" if user gives monthly figures):
-wages, self_employment, interest, dividends, capital_gains_short, capital_gains_long, other
+wages, bonus, cash_income, self_employment, interest, dividends, capital_gains_short, capital_gains_long, other
 Synonyms: salary/W-2/income at job → wages
+Bonus: use amountMode "percent_of_wages" with percent, or amountMode "fixed" with amount
+cash_income: taxable cash payments → otherIncome on tax return
 
 Contribution types:
 401k, 403b, traditional_ira, roth_ira, sep_ira, solo_401k, simple_ira, hsa, fsa_health, fsa_dependent_care, 529, employer_match
 - "maxed 401k" / "max 401k" → type 401k, amountExpression "max"
-- "max HSA" → type hsa, amountExpression "max"
+- "max HSA" → type hsa, amountExpression "max" (household cap under family coverage)
+- "max dependent care FSA" / "max DCFSA" → type fsa_dependent_care, amountExpression "max" (household cap)
 - "half max" → amountExpression "half_max"
-- Roth/529/FSA are stored but may not reduce taxes
+- employer_match: amountMode "fixed" | "percent_of_wages" | "percent_of_wages_and_bonus" with percent or amount
+- Roth/529/FSA health are stored; employer_match is informational
+
+Dependents (kids) are members with relationship "dependent".
+Capture child income on the dependent member, not on parents.
+Do not assign retirement/HSA/DCFSA contributions to dependents.
+
+liquidCashSnapshot: household liquid cash balance for planning (not taxable income).
 
 Filing status values: single, married_filing_jointly, married_filing_separately, head_of_household, qualifying_surviving_spouse
 Persona values: w2_employee, low_income, business_owner, family_with_kids
@@ -49,13 +68,14 @@ JSON schema (strict):
   "persona": string | null,
   "filingStatus": string | null,
   "defaultTaxYear": number | null,
+  "liquidCashSnapshot": number | null,
   "members": [{
     "matchName": string,
     "name": string?,
     "relationship": "self"|"spouse"|"dependent"|"other"?,
     "remove": boolean?,
-    "incomeSources": [{ "type": string, "amount": number?, "period": "annual"|"monthly", "updateMode": "set"|"add" }]?,
-    "contributions": [{ "type": string, "amount": number?, "amountExpression": "explicit"|"max"|"half_max", "updateMode": "set"|"add" }]?
+    "incomeSources": [{ "type": string, "amount": number?, "period": "annual"|"monthly", "updateMode": "set"|"add", "amountMode": "fixed"|"percent_of_wages"?, "percent": number? }]?,
+    "contributions": [{ "type": string, "amount": number?, "amountExpression": "explicit"|"max"|"half_max", "updateMode": "set"|"add", "amountMode": "fixed"|"percent_of_wages"|"percent_of_wages_and_bonus"?, "percent": number? }]?
   }] | null
 }`;
 }
