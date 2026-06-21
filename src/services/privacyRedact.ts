@@ -194,6 +194,108 @@ export function redactMembers(members: Member[]): RedactedMember[] {
   });
 }
 
+function grossIncomeFromInputs(
+  inputs: TaxProfile["inputs"] | undefined
+): number {
+  if (!inputs) return 0;
+  return (
+    Number(inputs.wages ?? 0) +
+    Number(inputs.selfEmploymentIncome ?? 0) +
+    Number(inputs.interestIncome ?? 0) +
+    Number(inputs.dividendIncome ?? 0) +
+    Number(inputs.capitalGainsShort ?? 0) +
+    Number(inputs.capitalGainsLong ?? 0) +
+    Number(inputs.otherIncome ?? 0)
+  );
+}
+
+const SS_RATE = 0.062;
+const SS_WAGE_BASE_2026 = 184_500;
+const MEDICARE_RATE = 0.0145;
+const ADDITIONAL_MEDICARE_RATE = 0.009;
+const NIIT_RATE = 0.038;
+
+function isJointFiling(filingStatus: string | undefined): boolean {
+  return (
+    filingStatus === "married_filing_jointly" ||
+    filingStatus === "qualifying_surviving_spouse"
+  );
+}
+
+function socialSecurityTax(wages: number, taxYear: number): number {
+  const base = taxYear >= 2026 ? SS_WAGE_BASE_2026 : 176_100;
+  return Math.min(wages, base) * SS_RATE;
+}
+
+function medicareTax(wages: number, filingStatus: string | undefined): number {
+  const base = wages * MEDICARE_RATE;
+  const threshold = isJointFiling(filingStatus) ? 250_000 : 200_000;
+  const additional =
+    wages > threshold ? (wages - threshold) * ADDITIONAL_MEDICARE_RATE : 0;
+  return base + additional;
+}
+
+function niitTax(
+  investmentIncome: number,
+  agi: number,
+  filingStatus: string | undefined
+): number {
+  const threshold = isJointFiling(filingStatus) ? 250_000 : 200_000;
+  const base = Math.max(0, agi - threshold);
+  const subject = Math.min(investmentIncome, base);
+  return subject * NIIT_RATE;
+}
+
+function computeRedactedTaxAnalytics(profile: TaxProfile): {
+  totalTaxRate?: number;
+  taxMixPercent?: {
+    federal: number;
+    socialSecurity: number;
+    medicare: number;
+    niit: number;
+  };
+} {
+  const estimate = profile.lastEstimate;
+  const inputs = profile.inputs;
+  if (!estimate || !inputs) return {};
+
+  const federal = estimate.federalTax ?? 0;
+  const wages = Number(inputs.wages ?? 0);
+  const taxYear = estimate.taxYear ?? profile.taxYear;
+  const investmentIncome =
+    Number(inputs.interestIncome ?? 0) +
+    Number(inputs.dividendIncome ?? 0) +
+    Number(inputs.capitalGainsShort ?? 0) +
+    Number(inputs.capitalGainsLong ?? 0);
+  const agi = estimate.adjustedGrossIncome ?? grossIncomeFromInputs(inputs);
+
+  const socialSecurity = socialSecurityTax(wages, taxYear);
+  const medicare = medicareTax(wages, profile.filingStatus);
+  const niit = niitTax(investmentIncome, agi, profile.filingStatus);
+  const totalTax = federal + socialSecurity + medicare + niit;
+  const grossIncome = grossIncomeFromInputs(inputs);
+
+  if (totalTax <= 0) {
+    return {
+      totalTaxRate:
+        grossIncome > 0 && estimate.effectiveRate != null
+          ? roundPercent(estimate.effectiveRate)
+          : undefined,
+    };
+  }
+
+  return {
+    totalTaxRate:
+      grossIncome > 0 ? roundPercent(totalTax / grossIncome) : undefined,
+    taxMixPercent: {
+      federal: roundPercent(federal / totalTax),
+      socialSecurity: roundPercent(socialSecurity / totalTax),
+      medicare: roundPercent(medicare / totalTax),
+      niit: roundPercent(niit / totalTax),
+    },
+  };
+}
+
 export function redactTaxProfile(profile: TaxProfile): RedactedTaxProfile {
   const {
     householdId: _householdId,
@@ -218,6 +320,7 @@ export function redactTaxProfile(profile: TaxProfile): RedactedTaxProfile {
           taxYear: lastEstimate.taxYear,
           effectiveRate: lastEstimate.effectiveRate,
           marginalRate: lastEstimate.marginalRate,
+          ...computeRedactedTaxAnalytics(profile),
         }
       : undefined,
   };

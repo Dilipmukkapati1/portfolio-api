@@ -7,6 +7,8 @@ import {
   mergeMemberPatches,
   normalizeHousehold,
   parseHouseholdAutoSavePatch,
+  resolveMemberContributionAmount,
+  resolveMemberIncomeAmounts,
   type AdvisorAutoSaveResult,
   type FilingStatus,
   type Household,
@@ -189,10 +191,21 @@ function diffPatchChanges(
     for (const income of memberPatch.incomeSources ?? []) {
       const line = afterMember.incomeSources.find((i) => i.type === income.type);
       if (line) {
+        let displayAmount = line.amount;
+        if (line.type === "bonus") {
+          displayAmount = resolveMemberIncomeAmounts(afterMember).bonus;
+        }
+        const label =
+          line.type === "bonus" && line.amountMode === "percent_of_wages"
+            ? `${afterMember.name} bonus (${line.percent ?? 0}%)`
+            : `${afterMember.name} ${income.type}`;
         changes.push({
           field: `member:${afterMember.name}:income:${income.type}`,
-          label: `${afterMember.name} ${income.type}`,
-          after: `$${formatValue(line.amount)}`,
+          label,
+          after:
+            line.type === "bonus" && line.amountMode === "percent_of_wages"
+              ? `$${formatValue(displayAmount)}/yr`
+              : `$${formatValue(displayAmount)}`,
         });
       }
     }
@@ -208,16 +221,25 @@ function diffPatchChanges(
       );
       const line = afterMember.contributions.find((c) => c.type === contrib.type);
       if (!line) continue;
-      const beforeAmount = beforeLine?.amount;
-      if (beforeAmount === line.amount && contrib.amountExpression !== "max") {
+      const resolvedAmount = resolveMemberContributionAmount(afterMember, line);
+      const beforeAmount = beforeLine
+        ? resolveMemberContributionAmount(beforeMember!, beforeLine)
+        : undefined;
+      if (beforeAmount === resolvedAmount && contrib.amountExpression !== "max") {
         continue;
       }
+      const matchLabel =
+        line.type === "employer_match" &&
+        line.amountMode &&
+        line.amountMode !== "fixed"
+          ? `${afterMember.name} employer_match (${line.percent ?? 0}%)`
+          : `${afterMember.name} ${contrib.type}`;
       changes.push({
         field: `member:${afterMember.name}:contribution:${contrib.type}`,
-        label: `${afterMember.name} ${contrib.type}`,
+        label: matchLabel,
         before:
           beforeAmount != null ? `$${formatValue(beforeAmount)}` : undefined,
-        after: `$${formatValue(line.amount)}`,
+        after: `$${formatValue(resolvedAmount)}`,
       });
     }
   }
