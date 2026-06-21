@@ -21,7 +21,11 @@ describe("shouldAttemptExtraction", () => {
     expect(shouldAttemptExtraction("We moved to Texas last month")).toBe(true);
   });
 
-  it("infers max 401k without LLM", () => {
+  it("detects compact k amounts", () => {
+    expect(shouldAttemptExtraction("reshma make 7k in bonus")).toBe(true);
+  });
+
+  it("infers max 401k as rule fallback", () => {
     const patches = inferMemberPatchesFromMessage(
       "We maxed out 401k contributions",
       [
@@ -44,7 +48,7 @@ describe("shouldAttemptExtraction", () => {
     });
   });
 
-  it("infers salary without LLM", () => {
+  it("infers salary as rule fallback", () => {
     const patches = inferMemberPatchesFromMessage("Salary $150k", [
       {
         id: "m1",

@@ -30,7 +30,7 @@ import { ensureDefaultHousehold } from "./ensureDefaultHousehold.js";
 import { saveHouseholdBundle } from "./householdWriteService.js";
 
 const PROFILE_SIGNAL =
-  /\b(moved to|live in|state|salary|wage|income|earn|make \$|contribute|401\s*\(?k|403\s*\(?b|hsa|ira|roth|filing|married|single|dependent|child|kid|baby|spouse|persona|household|maxed|max out|display name|tax year|bonus|dcfsa|dependent care|employer match|liquid cash|cash income)\b/i;
+  /\b(moved to|live in|state|salary|wage|income|earn|make|contribute|401\s*\(?k|403\s*\(?b|hsa|ira|roth|filing|married|single|dependent|child|kid|baby|spouse|persona|household|maxed|max out|display name|tax year|bonus|dcfsa|dependent care|employer match|liquid cash|cash income)\b/i;
 
 const US_STATE_NAMES =
   /\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming)\b/i;
@@ -39,6 +39,7 @@ export function shouldAttemptExtraction(message: string): boolean {
   const trimmed = message.trim();
   if (trimmed.length < 8) return false;
   if (PROFILE_SIGNAL.test(trimmed)) return true;
+  if (/\b\d+(?:\.\d+)?\s*[kmKM]\b/.test(trimmed)) return true;
   if (US_STATE_NAMES.test(trimmed)) return true;
   if (/\b[A-Z]{2}\b/.test(trimmed) && /\b(in|to|from)\b/i.test(trimmed)) {
     return true;
@@ -67,10 +68,14 @@ function buildCompactSnapshot(
       incomeSources: (m.incomeSources ?? []).map((i) => ({
         type: i.type,
         amount: i.amount,
+        amountMode: i.amountMode,
+        percent: i.percent,
       })),
       contributions: (m.contributions ?? []).map((c) => ({
         type: c.type,
         amount: c.amount,
+        amountMode: c.amountMode,
+        percent: c.percent,
       })),
     })),
   };
@@ -286,47 +291,41 @@ export async function tryAutoSaveHouseholdFromChat(options: {
     options.userMessage,
     members
   );
-  const hasRuleBasedUpdates = inferredMemberPatches.length > 0;
 
   let patch: HouseholdAutoSavePatch = {};
   let llmExtractionFailed = false;
+  let llmConfigured = true;
 
-  if (!hasRuleBasedUpdates) {
-    try {
-      patch = await openRouterExtractJson({
-        messages: [
-          {
-            role: "system",
-            content: buildHouseholdExtractionSystemPrompt({
-              snapshotJson: JSON.stringify(snapshot, null, 2),
-              taxYear,
-              limits: {
-                retirement401kLimit: rules.retirement401kLimit ?? 23500,
-                hsaSingleLimit: rules.hsaSingleLimit ?? 4300,
-                hsaFamilyLimit: rules.hsaFamilyLimit ?? 8550,
-                fsaHealthLimit: rules.fsaHealthLimit ?? 3300,
-                fsaDependentCareLimit: rules.fsaDependentCareLimit ?? 5000,
-                fsaDependentCareLimitMfs: rules.fsaDependentCareLimitMfs ?? 2500,
-              },
-            }),
-          },
-          {
-            role: "user",
-            content: buildHouseholdExtractionUserMessage(options.userMessage),
-          },
-        ],
-        parse: parseHouseholdAutoSavePatch,
-      });
-    } catch (err) {
-      if (err instanceof OpenRouterNotConfiguredError) {
-        return {
-          enabled: true,
-          attempted: true,
-          applied: false,
-          changes: [],
-          skippedReason: "extraction_not_configured",
-        };
-      }
+  try {
+    patch = await openRouterExtractJson({
+      messages: [
+        {
+          role: "system",
+          content: buildHouseholdExtractionSystemPrompt({
+            snapshotJson: JSON.stringify(snapshot, null, 2),
+            taxYear,
+            limits: {
+              retirement401kLimit: rules.retirement401kLimit ?? 23500,
+              hsaSingleLimit: rules.hsaSingleLimit ?? 4300,
+              hsaFamilyLimit: rules.hsaFamilyLimit ?? 8550,
+              fsaHealthLimit: rules.fsaHealthLimit ?? 3300,
+              fsaDependentCareLimit: rules.fsaDependentCareLimit ?? 5000,
+              fsaDependentCareLimitMfs: rules.fsaDependentCareLimitMfs ?? 2500,
+            },
+          }),
+        },
+        {
+          role: "user",
+          content: buildHouseholdExtractionUserMessage(options.userMessage),
+        },
+      ],
+      parse: parseHouseholdAutoSavePatch,
+    });
+  } catch (err) {
+    if (err instanceof OpenRouterNotConfiguredError) {
+      llmConfigured = false;
+      patch = {};
+    } else {
       llmExtractionFailed = true;
       patch = {};
     }
@@ -346,6 +345,20 @@ export async function tryAutoSaveHouseholdFromChat(options: {
       applied: false,
       changes: [],
       skippedReason: "extraction_failed",
+    };
+  }
+
+  if (
+    !llmConfigured &&
+    inferredMemberPatches.length === 0 &&
+    !patchHasUpdates(patch)
+  ) {
+    return {
+      enabled: true,
+      attempted: true,
+      applied: false,
+      changes: [],
+      skippedReason: "extraction_not_configured",
     };
   }
 

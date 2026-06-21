@@ -191,7 +191,7 @@ export async function openRouterExtractJson<T>(
   const result = await openRouterChatComplete({
     ...options,
     model: options.model ?? openRouter.extractionModel,
-    maxTokens: 600,
+    maxTokens: 900,
     temperature: 0,
   });
   const raw = extractJsonObjectFromText(result.content);

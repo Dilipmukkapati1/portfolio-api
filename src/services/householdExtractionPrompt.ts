@@ -32,6 +32,13 @@ Per-member caps:
 - HSA single (self-only coverage): $${limits.hsaSingleLimit}
 - Health FSA (each person): $${limits.fsaHealthLimit}
 
+Parsing rules:
+- Match members by first name or full name from the snapshot (case-insensitive).
+- "7k", "150k", "$7k" → multiply k/K by 1,000; m/M by 1,000,000.
+- Monthly amounts: set period "monthly"; annual: period "annual" (default).
+- Bonus fixed dollar: amountMode "fixed" with amount. Bonus as % of wages: amountMode "percent_of_wages" with percent.
+- Phrases like "bonus is 7k", "make 7k in bonus", "7k bonus", "gets 18% bonus" must map to the named member's bonus line.
+
 Income types (store annual amounts; use period "monthly" if user gives monthly figures):
 wages, bonus, cash_income, self_employment, interest, dividends, capital_gains_short, capital_gains_long, other
 Synonyms: salary/W-2/income at job → wages
@@ -61,6 +68,16 @@ Member patches:
 - remove: true only if user explicitly asks to remove/delete a member
 - updateMode "set" replaces line amount; "add" adds to existing
 
+Examples (output shape only — use actual snapshot member names):
+User: "reshma bonus is 7k"
+→ members: [{ "matchName": "Reshma", "incomeSources": [{ "type": "bonus", "amount": 7000, "amountMode": "fixed", "period": "annual", "updateMode": "set" }] }]
+
+User: "dilip get 18% bonus on base salary"
+→ members: [{ "matchName": "Dilip", "incomeSources": [{ "type": "bonus", "amountMode": "percent_of_wages", "percent": 18, "period": "annual", "updateMode": "set" }] }]
+
+User: "I maxed out my 401k"
+→ members: [{ "matchName": "self", "contributions": [{ "type": "401k", "amountExpression": "max", "updateMode": "set" }] }]
+
 JSON schema (strict):
 {
   "displayName": string | null,
@@ -81,7 +98,10 @@ JSON schema (strict):
 }
 
 export function buildHouseholdExtractionUserMessage(message: string): string {
-  return `User message:\n${message.trim()}`;
+  return `Extract profile updates from this message. Return JSON only.
+
+User message:
+${message.trim()}`;
 }
 
 export function emptyAutoSavePatch(): HouseholdAutoSavePatch {
