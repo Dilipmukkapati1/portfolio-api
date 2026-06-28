@@ -67,9 +67,15 @@ function buildCategoryBudgets(
 
 async function loadExpenseChatContext(
   householdId: string,
-  timeRange: ExpenseChatTimeRange
+  timeRange: ExpenseChatTimeRange,
+  accountId?: string
 ): Promise<ExpenseChatContext> {
   const plan = await getOrCreatePlan(householdId);
+  const periodInput = {
+    startDate: timeRange.startDate,
+    endDate: timeRange.endDate,
+    ...(accountId ? { accountId } : {}),
+  };
 
   let summary: TransactionSummaryResponse = {
     totalCredits: 0,
@@ -85,17 +91,10 @@ async function loadExpenseChatContext(
 
   try {
     [summary, spendByDay, topMerchants] = await Promise.all([
-      summarizePeriod(householdId, {
-        startDate: timeRange.startDate,
-        endDate: timeRange.endDate,
-      }),
-      summarizeSpendByDay(householdId, {
-        startDate: timeRange.startDate,
-        endDate: timeRange.endDate,
-      }),
+      summarizePeriod(householdId, periodInput),
+      summarizeSpendByDay(householdId, periodInput),
       summarizeTopMerchants(householdId, {
-        startDate: timeRange.startDate,
-        endDate: timeRange.endDate,
+        ...periodInput,
         limit: 12,
       }),
     ]);
@@ -221,8 +220,9 @@ export async function buildExpenseChatResponse(
 
   const messageRange = extractTimeRangeFromMessage(message);
   const { range, wasClamped } = resolveExpenseChatTimeRange(messageRange);
+  const accountId = request.accountId?.trim() || undefined;
 
-  const context = await loadExpenseChatContext(householdId, range);
+  const context = await loadExpenseChatContext(householdId, range, accountId);
 
   const intent = detectExpenseChatIntent(message);
   let blocks = buildExpenseChatBlocks(
