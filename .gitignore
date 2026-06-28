@@ -12,6 +12,7 @@ coverage/
 .local-data/
 .local/
 .cosmos/
+api.zip
 
 .mssql/
 db/liquibase.local.properties
