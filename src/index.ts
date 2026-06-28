@@ -26,6 +26,7 @@ import "./functions/timerNightly.js";
 import "./functions/submitBatch.js";
 import "./functions/investmentPlan.js";
 import "./functions/expensePlan.js";
+import "./functions/expenseChat.js";
 import "./functions/instruments.js";
 import "./functions/projections.js";
 import "./functions/advisor.js";

@@ -1,8 +1,9 @@
 import type { TransactionSummaryResponse } from "@portfolio/contracts";
+import { expenseIgnoredCategorySqlIn } from "@portfolio/contracts";
 import sql from "mssql";
 import { getSqlPool, withSqlRetry } from "../sql/client.js";
 
-const EXCLUDED_CATEGORIES = ["transfer", "investment"];
+const IGNORED = expenseIgnoredCategorySqlIn();
 
 export type SummarizePeriodInput = {
   startDate: string;
@@ -42,12 +43,14 @@ export async function summarizePeriod(
     let totalsQuery = `
       SELECT
         SUM(CASE
-          WHEN amount > 0 AND category NOT IN ('transfer', 'investment')
+          WHEN amount > 0 AND category NOT IN (${IGNORED})
           THEN amount ELSE 0 END) AS total_credits,
         SUM(CASE
-          WHEN amount < 0 AND category NOT IN ('transfer', 'investment')
+          WHEN amount < 0 AND category NOT IN (${IGNORED})
           THEN ABS(amount) ELSE 0 END) AS total_spend,
-        COUNT(*) AS transaction_count
+        SUM(CASE
+          WHEN amount < 0 AND category NOT IN (${IGNORED})
+          THEN 1 ELSE 0 END) AS transaction_count
       FROM transactions
       WHERE household_id = @hid
         AND pending = 0
@@ -77,7 +80,7 @@ export async function summarizePeriod(
       WHERE household_id = @hid
         AND pending = 0
         AND amount < 0
-        AND category NOT IN ('transfer', 'investment')
+        AND category NOT IN (${IGNORED})
         AND txn_date >= @start
         AND txn_date <= @end`;
 
@@ -111,7 +114,7 @@ export async function summarizePeriod(
       WHERE household_id = @hid
         AND pending = 0
         AND amount < 0
-        AND category NOT IN ('transfer', 'investment')
+        AND category NOT IN (${IGNORED})
         AND txn_date >= @start
         AND txn_date <= @end`;
 
@@ -141,5 +144,101 @@ export async function summarizePeriod(
       spendByAccount,
       transactionCount: Number(totalsRow?.transaction_count ?? 0),
     };
+  });
+}
+
+export async function summarizeSpendByDay(
+  householdId: string,
+  input: SummarizePeriodInput
+): Promise<Array<{ date: string; spend: number }>> {
+  validatePeriod(input);
+
+  return withSqlRetry(async () => {
+    const pool = await getSqlPool();
+    const request = pool.request();
+    request.input("hid", sql.NVarChar(128), householdId);
+    request.input("start", sql.Date, input.startDate);
+    request.input("end", sql.Date, input.endDate);
+
+    let query = `
+      SELECT txn_date AS txn_day, SUM(ABS(amount)) AS spend
+      FROM transactions
+      WHERE household_id = @hid
+        AND pending = 0
+        AND amount < 0
+        AND category NOT IN (${IGNORED})
+        AND txn_date >= @start
+        AND txn_date <= @end`;
+
+    if (input.accountId) {
+      request.input("aid", sql.NVarChar(128), input.accountId);
+      query += " AND account_id = @aid";
+    }
+
+    query += " GROUP BY txn_date ORDER BY txn_date ASC";
+
+    const result = await request.query<{
+      txn_day: Date | string;
+      spend: number | null;
+    }>(query);
+
+    return result.recordset.map((row) => {
+      const day =
+        row.txn_day instanceof Date
+          ? row.txn_day.toISOString().slice(0, 10)
+          : String(row.txn_day).slice(0, 10);
+      return { date: day, spend: Number(row.spend ?? 0) };
+    });
+  });
+}
+
+export async function summarizeTopMerchants(
+  householdId: string,
+  input: SummarizePeriodInput & { limit?: number }
+): Promise<Array<{ merchant: string; spend: number; count: number }>> {
+  validatePeriod(input);
+  const limit = Math.min(Math.max(input.limit ?? 10, 1), 25);
+
+  return withSqlRetry(async () => {
+    const pool = await getSqlPool();
+    const request = pool.request();
+    request.input("hid", sql.NVarChar(128), householdId);
+    request.input("start", sql.Date, input.startDate);
+    request.input("end", sql.Date, input.endDate);
+    request.input("lim", sql.Int, limit);
+
+    let query = `
+      SELECT TOP (@lim)
+        COALESCE(NULLIF(merchant, ''), NULLIF(description, ''), 'Unknown') AS merchant_key,
+        SUM(ABS(amount)) AS spend,
+        COUNT(*) AS txn_count
+      FROM transactions
+      WHERE household_id = @hid
+        AND pending = 0
+        AND amount < 0
+        AND category NOT IN (${IGNORED})
+        AND txn_date >= @start
+        AND txn_date <= @end`;
+
+    if (input.accountId) {
+      request.input("aid", sql.NVarChar(128), input.accountId);
+      query += " AND account_id = @aid";
+    }
+
+    query += `
+      GROUP BY COALESCE(NULLIF(merchant, ''), NULLIF(description, ''), 'Unknown')
+      ORDER BY spend DESC`;
+
+    const result = await request.query<{
+      merchant_key: string;
+      spend: number | null;
+      txn_count: number | null;
+    }>(query);
+
+    return result.recordset.map((row) => ({
+      merchant: row.merchant_key,
+      spend: Number(row.spend ?? 0),
+      count: Number(row.txn_count ?? 0),
+    }));
   });
 }

@@ -41,6 +41,10 @@ async function transactionsHandler(
           url.searchParams.get("pending") === null
             ? undefined
             : url.searchParams.get("pending") === "true",
+        expenseDebitsOnly:
+          url.searchParams.get("expenseDebitsOnly") === "true"
+            ? true
+            : undefined,
         startDate: url.searchParams.get("startDate") ?? undefined,
         endDate: url.searchParams.get("endDate") ?? undefined,
         limit: url.searchParams.get("limit")

@@ -3,6 +3,7 @@ import type {
   TransactionFilter,
   TransactionListResponse,
 } from "@portfolio/contracts";
+import { expenseIgnoredCategorySqlIn } from "@portfolio/contracts";
 import sql from "mssql";
 import { decodeTransactionCursor, encodeTransactionCursor } from "../lib/transactionCursor.js";
 import { getSqlPool, withSqlRetry } from "./client.js";
@@ -44,7 +45,10 @@ export class SqlTransactionStore {
         request.input("src", sql.NVarChar(32), filter.source);
         query += " AND source = @src";
       }
-      if (filter.pending !== undefined) {
+      if (filter.expenseDebitsOnly) {
+        query += " AND pending = 0 AND amount < 0";
+        query += ` AND category NOT IN (${expenseIgnoredCategorySqlIn()})`;
+      } else if (filter.pending !== undefined) {
         request.input("pending", sql.Bit, filter.pending ? 1 : 0);
         query += " AND pending = @pending";
       }

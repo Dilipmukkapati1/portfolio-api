@@ -6,6 +6,7 @@ import type {
 import {
   buildDefaultExpensePlan,
   expensePlanDocumentId,
+  normalizeExpensePlan,
   ruleMatchesTransaction,
 } from "@portfolio/contracts";
 import { expensePlanRepository } from "../cosmos/repositories/expensePlanRepository.js";
@@ -13,7 +14,7 @@ import { transactionRepository } from "../cosmos/repositories/transactionReposit
 
 export async function getOrCreatePlan(householdId: string): Promise<ExpensePlan> {
   const existing = await expensePlanRepository.get(householdId);
-  if (existing) return existing;
+  if (existing) return expensePlanRepository.upsert(normalizeExpensePlan(existing));
 
   const plan = buildDefaultExpensePlan(householdId);
   return expensePlanRepository.upsert(plan);
@@ -33,15 +34,19 @@ export async function upsertPlan(
   const existing = await getOrCreatePlan(householdId);
   const now = new Date().toISOString();
 
-  const plan: ExpensePlan = {
+  const plan: ExpensePlan = normalizeExpensePlan({
     id: expensePlanDocumentId(householdId),
     householdId,
+    monthlyExpenseTotal:
+      input.monthlyExpenseTotal ?? existing.monthlyExpenseTotal ?? 0,
+    budgetAllocationMode:
+      input.budgetAllocationMode ?? existing.budgetAllocationMode ?? "dollar",
     categories: input.categories ?? existing.categories,
     mappingRules: input.mappingRules
       ? normalizeRules(input.mappingRules)
       : existing.mappingRules,
     updatedAt: now,
-  };
+  });
 
   return expensePlanRepository.upsert(plan);
 }
