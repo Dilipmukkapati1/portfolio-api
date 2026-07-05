@@ -1,0 +1,35 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "APP_ENV": "local",
+    "STORAGE_MODE": "cosmos",
+    "COSMOS_ENDPOINT": "https://localhost:8081",
+    "COSMOS_KEY": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLMUA6/4c6K8=",
+    "COSMOS_DATABASE": "portfolio-local",
+    "KEY_VAULT_NAME": "",
+    "API_PUBLIC_BASE_URL": "http://localhost:7071",
+    "WEB_APP_URL": "http://localhost:3000",
+    "DEFAULT_HOUSEHOLD_ID": "local-household",
+    "AUTH_PASSWORD": "portfolio",
+    "AUTH_SECRET": "portfolio-dev-secret",
+    "PRIVACY_JWT_SECRET": "portfolio-dev-privacy-secret",
+    "SIMPLEFIN_ACCESS_URL": "",
+    "SIMPLEFIN_ACCESS_URL__LOCAL_HOUSEHOLD": "",
+    "SNAPTRADE_CLIENT_ID": "",
+    "SNAPTRADE_CONSUMER_KEY": "",
+    "SNAPTRADE_WEBHOOK_SECRET": "",
+    "SNAPTRADE_REDIRECT_URL": "http://localhost:7071/api/integrations/snaptrade/callback",
+    "PORTFOLIO_QUEUE_NAME": "portfolio-sync",
+    "AZURE_SQL_SERVER": "localhost",
+    "AZURE_SQL_DATABASE": "portfolio",
+    "AZURE_SQL_USER": "sa",
+    "AZURE_SQL_PASSWORD": "Portfolio_Local1!",
+    "AZURE_SQL_ENCRYPT": "false",
+    "OPENROUTER_API_KEY": ""
+  },
+  "Host": {
+    "CORS": "*"
+  }
+}

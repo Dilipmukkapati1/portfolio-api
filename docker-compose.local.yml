@@ -1,0 +1,57 @@
+# Fully-local database mirror for portfolio-api.
+#
+#   npm run local:up        # start cosmos emulator + SQL Server
+#   npm run local:down      # stop (data persists in named volumes)
+#   npm run local:down -- -v   # stop and wipe data
+#
+# Azurite (queues/blob) is NOT here on purpose — it runs via `npm run storage:start`
+# to match the existing `require-azurite` preflight and avoid port conflicts.
+#
+# See README.md → "Fully local (Docker mirror)".
+
+services:
+  # Cosmos DB emulator — households, accounts, holdings, tax profiles, etc.
+  # Serves HTTPS on 8081 with the well-known emulator key. The API auto-detects
+  # the localhost endpoint (src/cosmos/client.ts) and auto-creates the database
+  # and all containers (src/cosmos/bootstrap.ts) on first use.
+  cosmos:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    container_name: ppm-cosmos
+    ports:
+      - "8081:8081"
+      - "10250-10255:10250-10255"
+    environment:
+      # Fewer partitions => faster startup and lower memory (default is 25).
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "10"
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "true"
+    volumes:
+      - cosmos-data:/tmp/cosmos/appdata
+    # The emulator is heavy (~3-4 GB, ~1-2 min to become ready). If it is flaky
+    # on this machine, swap the image tag for `:vnext-preview` (same endpoint/key).
+
+  # SQL Server 2022 — transactions only (Liquibase-managed schema).
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: ppm-sql
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Portfolio_Local1!"
+      MSSQL_PID: "Developer"
+    volumes:
+      - sql-data:/var/opt/mssql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -No -Q 'SELECT 1' || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  cosmos-data:
+  sql-data:

@@ -13,6 +13,40 @@ Azure Functions v4 (TypeScript) — Cosmos DB, Azure SQL, Key Vault, SimpleFIN, 
 
 Or use `STORAGE_MODE=disk` for fully local JSON storage (no Cosmos/SQL).
 
+## Fully local (Docker mirror)
+
+Run against **local databases** instead of the shared Azure dev stack — no VPN, no IP allowlisting, no auto-pause cold starts, no shared `sqldb-dev`. Mirrors prod topology: **Cosmos DB Emulator** for entities + **SQL Server 2022** for transactions, both in Docker; Azurite (queues/blob) stays on npm.
+
+**Prerequisites:** Docker Desktop running, `jq`. Use a Node version Azure Functions supports (18/20/22) — e.g. `node@22`; Node 25 breaks Azurite.
+
+### One-time setup
+
+```bash
+cp local.settings.local.example.json local.settings.json
+npm install && npm run build     # build also compiles ../portfolio-contracts and ../portfolio-tax-engine
+npm run local:up                 # start cosmos emulator + SQL Server (wait ~1-2 min for cosmos)
+npm run db:migrate:local         # create `portfolio` DB + transactions table
+```
+
+### Each session (three terminals)
+
+```bash
+npm run storage:start            # T1: Azurite (keep running)
+npm run local:up                 # T2: ensure cosmos + SQL are up
+npm start                        # T3: build + func start on :7071
+```
+
+`npm start` reads `COSMOS_*`/`AZURE_SQL_*` from `local.settings.json` and does not overwrite them — just don't run `npm run azure:local` (which repoints them at Azure).
+
+| npm script | Purpose |
+| ---------- | ------- |
+| `local:up` / `local:down` | Start / stop the local DB containers (data persists in volumes; `local:down -- -v` wipes) |
+| `db:migrate:local` | Create `portfolio` DB + run Liquibase against local SQL (`db:migrate:local status` for pending) |
+
+Verify: `GET http://localhost:7071/api/health` → `storage: "cosmos"`, `sources.core: "cosmos"`, `sources.transactions: "azure-sql"`. Cosmos Data Explorer: `https://localhost:8081/_explorer/index.html`.
+
+If health shows `sources.core: "disk"` the Cosmos emulator wasn't reachable yet (still starting, or cert) — check `docker logs ppm-cosmos`, retry, or swap the image tag to `:vnext-preview` in `docker-compose.local.yml`.
+
 ## Local run (zero Docker)
 
 Local dev uses **Azure Cosmos** (`portfolio-dev`) and **Azure SQL** (`sqldb-dev`) from Terraform. Azurite runs via npm only.
