@@ -13,7 +13,7 @@ concurrency:
 
 env:
   API_REF: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.ref || github.ref }}
-  LIB_REF: develop
+  LIB_REF: main
 
 jobs:
   deploy:
