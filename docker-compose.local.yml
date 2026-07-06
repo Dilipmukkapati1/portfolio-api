@@ -10,24 +10,22 @@
 # See README.md → "Fully local (Docker mirror)".
 
 services:
-  # Cosmos DB emulator — households, accounts, holdings, tax profiles, etc.
-  # Serves HTTPS on 8081 with the well-known emulator key. The API auto-detects
-  # the localhost endpoint (src/cosmos/client.ts) and auto-creates the database
-  # and all containers (src/cosmos/bootstrap.ts) on first use.
+  # Cosmos DB emulator (vnext, Linux-native) — households, accounts, holdings, etc.
+  # Serves the account API over HTTP on 8081 with the well-known emulator key, plus
+  # a Data Explorer on 1234. The API auto-detects the localhost endpoint
+  # (src/cosmos/client.ts) and auto-creates the database and all containers
+  # (src/cosmos/bootstrap.ts) on first use.
+  #
+  # This replaced the legacy `:latest` image, which is the Windows emulator under an
+  # emulation layer — heavy (~3-4 GB, ~1-2 min start) and, on this machine, it began
+  # rejecting the well-known key mid-session. vnext starts in ~10s over HTTP and is
+  # reliable. Data is in-container (resets on `local:down`, persists across restarts).
   cosmos:
-    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
     container_name: ppm-cosmos
     ports:
       - "8081:8081"
-      - "10250-10255:10250-10255"
-    environment:
-      # Fewer partitions => faster startup and lower memory (default is 25).
-      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: "10"
-      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "true"
-    volumes:
-      - cosmos-data:/tmp/cosmos/appdata
-    # The emulator is heavy (~3-4 GB, ~1-2 min to become ready). If it is flaky
-    # on this machine, swap the image tag for `:vnext-preview` (same endpoint/key).
+      - "1234:1234"
 
   # SQL Server 2022 — transactions only (Liquibase-managed schema).
   sql:
@@ -53,5 +51,4 @@ services:
       start_period: 30s
 
 volumes:
-  cosmos-data:
   sql-data:

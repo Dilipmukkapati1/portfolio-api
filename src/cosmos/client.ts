@@ -33,9 +33,15 @@ export function getCosmosClient(): CosmosClient {
   if (!cosmosEndpoint) {
     throw new Error("COSMOS_ENDPOINT is required");
   }
-  const agent = isEmulatorEndpoint(cosmosEndpoint)
-    ? new https.Agent({ rejectUnauthorized: false })
-    : undefined;
+  // The classic emulator serves HTTPS with a self-signed cert (needs a permissive
+  // agent + NODE_TLS_REJECT_UNAUTHORIZED=0). The vnext emulator serves plain HTTP:
+  // the SDK connects to http://localhost fine on its own, but passing a custom
+  // (https) agent alongside an http endpoint trips its insecure-connection check.
+  // So only attach the agent for an https emulator endpoint.
+  const agent =
+    isEmulatorEndpoint(cosmosEndpoint) && cosmosEndpoint.startsWith("https://")
+      ? new https.Agent({ rejectUnauthorized: false })
+      : undefined;
 
   if (cosmosKey) {
     client = new CosmosClient({

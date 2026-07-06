@@ -5,7 +5,7 @@
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "APP_ENV": "local",
     "STORAGE_MODE": "cosmos",
-    "COSMOS_ENDPOINT": "https://localhost:8081",
+    "COSMOS_ENDPOINT": "http://localhost:8081",
     "COSMOS_KEY": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLMUA6/4c6K8=",
     "COSMOS_DATABASE": "portfolio-local",
     "KEY_VAULT_NAME": "",

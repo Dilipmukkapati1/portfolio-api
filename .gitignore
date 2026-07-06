@@ -13,6 +13,8 @@ coverage/
 .local/
 .cosmos/
 api.zip
+.azurite-dev.log
+.func-dev.log
 
 .mssql/
 db/liquibase.local.properties

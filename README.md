@@ -17,35 +17,37 @@ Or use `STORAGE_MODE=disk` for fully local JSON storage (no Cosmos/SQL).
 
 Run against **local databases** instead of the shared Azure dev stack — no VPN, no IP allowlisting, no auto-pause cold starts, no shared `sqldb-dev`. Mirrors prod topology: **Cosmos DB Emulator** for entities + **SQL Server 2022** for transactions, both in Docker; Azurite (queues/blob) stays on npm.
 
-**Prerequisites:** Docker Desktop running, `jq`. Use a Node version Azure Functions supports (18/20/22) — e.g. `node@22`; Node 25 breaks Azurite.
+**Prerequisites:** Docker Desktop running, `jq`. Node 23+ isn't supported by Azure Functions/Azurite — `start:local` auto-switches to Homebrew `node@22` if it's installed; otherwise use a supported Node (18/20/22) yourself.
 
 ### One-time setup
 
 ```bash
 cp local.settings.local.example.json local.settings.json
-npm install && npm run build     # build also compiles ../portfolio-contracts and ../portfolio-tax-engine
-npm run local:up                 # start cosmos emulator + SQL Server (wait ~1-2 min for cosmos)
+npm install
+npm run local:up                 # start cosmos emulator + SQL Server (first cosmos start ~1-2 min)
 npm run db:migrate:local         # create `portfolio` DB + transactions table
 ```
 
-### Each session (three terminals)
+### Each session (one command)
 
 ```bash
-npm run storage:start            # T1: Azurite (keep running)
-npm run local:up                 # T2: ensure cosmos + SQL are up
-npm start                        # T3: build + func start on :7071
+npm run start:local              # containers + Azurite + build + func on :7071
 ```
 
-`npm start` reads `COSMOS_*`/`AZURE_SQL_*` from `local.settings.json` and does not overwrite them — just don't run `npm run azure:local` (which repoints them at Azure).
+`start:local` does everything: it brings up the local DB containers (only when `local.settings.json` points at localhost), starts Azurite in the background, builds if needed, then runs the Functions host. `COSMOS_*`/`AZURE_SQL_*` come from `local.settings.json` and aren't overwritten — just don't run `npm run azure:local` (which repoints them at Azure). Pass `-- --build` to force a rebuild.
 
 | npm script | Purpose |
 | ---------- | ------- |
-| `local:up` / `local:down` | Start / stop the local DB containers (data persists in volumes; `local:down -- -v` wipes) |
+| `local:up` / `local:down` | Start / stop the local DB containers (SQL data persists in a volume; `local:down -- -v` wipes; the Cosmos emulator is in-container and resets on `local:down`) |
 | `db:migrate:local` | Create `portfolio` DB + run Liquibase against local SQL (`db:migrate:local status` for pending) |
 
-Verify: `GET http://localhost:7071/api/health` → `storage: "cosmos"`, `sources.core: "cosmos"`, `sources.transactions: "azure-sql"`. Cosmos Data Explorer: `https://localhost:8081/_explorer/index.html`.
+The Cosmos emulator is the Linux-native `vnext-preview` image, served over **HTTP** on `http://localhost:8081` (`COSMOS_ENDPOINT` in the example settings) with the well-known key; Data Explorer is at `http://localhost:1234`. (The legacy `:latest` image is the Windows emulator under emulation — heavy and, here, it started rejecting the well-known key mid-session, so we don't use it.)
 
-If health shows `sources.core: "disk"` the Cosmos emulator wasn't reachable yet (still starting, or cert) — check `docker logs ppm-cosmos`, retry, or swap the image tag to `:vnext-preview` in `docker-compose.local.yml`.
+Startup verifies only that the Cosmos database exists; the 13 containers are **created on demand** on first read/write, so `start:local` doesn't pre-create them (which is serialized and slow on the emulator). Set `COSMOS_WARMUP=all` to pre-create everything at startup instead.
+
+Verify: `GET http://localhost:7071/api/health` → `storage: "cosmos"`, `sources.core: "cosmos"`, `sources.transactions: "azure-sql"`.
+
+If health shows `sources.core: "disk"`, the app started before Cosmos was ready and fell back for that run — `start:local` waits for the emulator, but if you started `func` another way, just restart it once `docker logs ppm-cosmos` shows it serving.
 
 ## Local run (zero Docker)
 

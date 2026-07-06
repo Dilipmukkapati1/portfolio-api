@@ -276,10 +276,15 @@ export function warmCosmosContainers(): Promise<void> {
   if (warmupPromise) return warmupPromise;
 
   warmupPromise = (async () => {
-    if (usingAzure() && process.env.COSMOS_WARMUP !== "all") {
+    // Default (Azure and emulator): verify only that the database exists and defer
+    // every container to first use. Containers are created on demand by
+    // getContainerReady -> ensureCosmosContainer on each read/write, so pre-creating
+    // them at startup is pure prepay — and on the emulator it's serialized and slow.
+    // Set COSMOS_WARMUP=all to pre-create at startup instead.
+    if (process.env.COSMOS_WARMUP !== "all") {
       await ensureCosmosReady();
       console.log(
-        "[portfolio-api] Cosmos database verified (container warmup deferred — set COSMOS_WARMUP=all to verify all at startup)"
+        "[portfolio-api] Cosmos database verified (containers created on demand — set COSMOS_WARMUP=all to pre-create at startup)"
       );
       return;
     }
