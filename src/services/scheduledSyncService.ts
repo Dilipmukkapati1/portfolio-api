@@ -14,8 +14,13 @@ export async function runScheduledIntegrationSync(): Promise<void> {
       ? households.map((household) => household.householdId)
       : [getConfig().defaultHouseholdId];
 
+  const { simplefinScheduledSyncEnabled } = getConfig();
+
   for (const householdId of householdIds) {
-    if (await canSyncSimplefin(householdId)) {
+    if (
+      simplefinScheduledSyncEnabled &&
+      (await canSyncSimplefin(householdId))
+    ) {
       try {
         await syncSimplefinForHousehold(householdId);
       } catch (err) {

@@ -9,6 +9,7 @@
   "COSMOS_DATABASE": "portfolio-dev",
   "AZURE_SQL_SERVER": "YOUR-DEV-SQL.database.windows.net",
   "AZURE_SQL_DATABASE": "sqldb-dev",
+  "SIMPLEFIN_SCHEDULED_SYNC_ENABLED": "false",
   "SIMPLEFIN_ACCESS_URL": "",
   "SIMPLEFIN_ACCESS_URL__DEV_HOUSEHOLD": "",
   "SNAPTRADE_CLIENT_ID": "",
