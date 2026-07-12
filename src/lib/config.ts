@@ -27,6 +27,13 @@ function readEnv(name: string): string | undefined {
   return value || undefined;
 }
 
+function readBoolEnv(name: string, defaultValue: boolean): boolean {
+  const value = readEnv(name);
+  if (value === undefined) return defaultValue;
+  const normalized = value.toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes";
+}
+
 /** Household id `local-household` → env suffix `LOCAL_HOUSEHOLD`. */
 export function householdEnvSuffix(householdId: string): string {
   return householdId.replace(/-/g, "_").toUpperCase();
@@ -102,6 +109,10 @@ export function getConfig() {
       fmpBaseUrl:
         readEnv("FMP_BASE_URL") ?? "https://financialmodelingprep.com/stable",
     },
+    simplefinScheduledSyncEnabled: readBoolEnv(
+      "SIMPLEFIN_SCHEDULED_SYNC_ENABLED",
+      appEnv === "local"
+    ),
     integrations: {
       simplefin: {
         /** Claimed SimpleFIN Access URL (optional if using Connections UI). */

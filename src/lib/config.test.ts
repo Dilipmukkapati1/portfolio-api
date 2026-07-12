@@ -12,12 +12,28 @@ describe("config", () => {
     delete process.env.APP_ENV;
     delete process.env.SIMPLEFIN_ACCESS_URL;
     delete process.env.SIMPLEFIN_ACCESS_URL__LOCAL_HOUSEHOLD;
+    delete process.env.SIMPLEFIN_SCHEDULED_SYNC_ENABLED;
     delete process.env.API_PUBLIC_BASE_URL;
   });
 
   it("defaults to local app env", () => {
     expect(getConfig().appEnv).toBe("local");
     expect(getConfig().apiPublicBaseUrl).toBe("http://localhost:7071");
+    expect(getConfig().simplefinScheduledSyncEnabled).toBe(true);
+  });
+
+  it("disables scheduled SimpleFIN sync in deployed environments by default", () => {
+    process.env.APP_ENV = "development";
+    expect(getConfig().simplefinScheduledSyncEnabled).toBe(false);
+
+    process.env.APP_ENV = "production";
+    expect(getConfig().simplefinScheduledSyncEnabled).toBe(false);
+  });
+
+  it("reads SIMPLEFIN_SCHEDULED_SYNC_ENABLED override", () => {
+    process.env.APP_ENV = "production";
+    process.env.SIMPLEFIN_SCHEDULED_SYNC_ENABLED = "true";
+    expect(getConfig().simplefinScheduledSyncEnabled).toBe(true);
   });
 
   it("uses dev-household on shared Azure Cosmos even when DEFAULT_HOUSEHOLD_ID is local-household", () => {
